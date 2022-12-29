@@ -1,12 +1,7 @@
 import os
-import shutil
 from telegram import Update
 from telegram.ext import (Updater, CommandHandler, MessageHandler, Filters,
                           CallbackContext)
-
-
-def archive_folder(folder, path):
-    shutil.make_archive(path, 'zip', folder)
 
 
 class TelegramTools:
@@ -30,28 +25,18 @@ class TelegramTools:
 
     def echo(self, update: Update, context: CallbackContext) -> None:
         print(update.message.text)
-        target_user = update.message.text
 
-        if os.path.isdir(target_user):
-            shutil.rmtree(target_user)
+        archive = self.ig_tools.download_all_profile_media(update.message.text)
+        
+        if archive:
+            if os.path.isfile(archive):
+                update.message.reply_text("Here is your archive")
+                with open(archive, 'rb') as p:
+                    update.message.reply_document(p)
+            else:
+                update.message.reply_text("Wooops, some problem is here...")
 
-        if os.path.isfile(target_user + ".zip"):
-            os.remove(target_user + ".zip")
-
-        os.mkdir(target_user)
-
-        self.ig_tools.download_all_profile_media(target_user, target_user)
-        archive_folder(target_user, target_user)
-
-        if os.path.isfile(target_user + ".zip"):
-            update.message.reply_text("Here is your archive")
-            with open(target_user + ".zip", 'rb') as p:
-                update.message.reply_document(p)
+            if os.path.isfile(archive):
+                os.remove(archive)
         else:
             update.message.reply_text("Wooops, some problem is here...")
-
-        if os.path.isdir(target_user):
-            shutil.rmtree(target_user)
-
-        if os.path.isfile(target_user + ".zip"):
-            os.remove(target_user + ".zip")
