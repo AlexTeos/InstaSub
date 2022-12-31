@@ -2,6 +2,9 @@ import unittest
 import os
 import shutil
 from instagrapi import Client
+from instagrapi.exceptions import (
+    LoginRequired
+)
 
 
 def archive_folder(path):
@@ -19,6 +22,12 @@ class InstagramTools:
             self.client.login(username, password)
             self.client.dump_settings('credential.json')
 
+        try:
+            self.client.account_info()
+        except LoginRequired:
+            self.client.relogin()
+            self.client.dump_settings('credential.json')
+
     @staticmethod
     def extract_username(username):
         username = username.split('/')
@@ -28,34 +37,40 @@ class InstagramTools:
         if len(username):
             return username.pop()
 
-    def download_all_profile_media(self, username):
+    def get_medias(self, username):
         username = self.extract_username(username)
-
         if username:
             user_id = self.client.user_id_from_username(username)
-            medias = self.client.user_medias(user_id)
+            return self.client.user_medias(user_id)
 
+    def download_media(self, media, path):
+        if media.media_type == 1:
+            # Photo
+            self.client.photo_download(media.pk, path)
+        elif media.media_type == 2 and media.product_type == 'feed':
+            # Video
+            self.client.video_download(media.pk, path)
+        elif media.media_type == 2 and media.product_type == 'igtv':
+            # IGTV
+            self.client.video_download(media.pk, path)
+        elif media.media_type == 2 and media.product_type == 'clips':
+            # Reels
+            self.client.video_download(media.pk, path)
+        elif media.media_type == 8:
+            # Album
+            self.client.album_download(media.pk, path)
+
+    def download_all_profile_media(self, username):
+        medias = self.get_medias(username)
+
+        if medias:
             if os.path.isdir(username):
                 shutil.rmtree(username)
 
             os.mkdir(username)
 
             for m in medias:
-                if m.media_type == 1:
-                    # Photo
-                    self.client.photo_download(m.pk, username)
-                elif m.media_type == 2 and m.product_type == 'feed':
-                    # Video
-                    self.client.video_download(m.pk, username)
-                elif m.media_type == 2 and m.product_type == 'igtv':
-                    # IGTV
-                    self.client.video_download(m.pk, username)
-                elif m.media_type == 2 and m.product_type == 'clips':
-                    # Reels
-                    self.client.video_download(m.pk, username)
-                elif m.media_type == 8:
-                    # Album
-                    self.client.album_download(m.pk, username)
+                self.download_media(m, username)
 
             archive_file = username + ".zip"
 
