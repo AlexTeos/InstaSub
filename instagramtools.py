@@ -37,11 +37,17 @@ class InstagramTools:
         if len(username):
             return username.pop()
 
-    def get_medias(self, username):
+    def get_user_id(self, username):
         username = self.extract_username(username)
         if username:
-            user_id = self.client.user_id_from_username(username)
-            return self.client.user_medias(user_id)
+            return self.client.user_id_from_username(username)
+
+    def get_medias(self, user_id):
+        return self.client.user_medias(user_id)
+
+    def is_public_user(self, user_id):
+        user = self.client.user_info(user_id)
+        return not user.is_private
 
     def download_media(self, media, path):
         if media.media_type == 1:
@@ -60,27 +66,27 @@ class InstagramTools:
             # Album
             self.client.album_download(media.pk, path)
 
-    def download_all_profile_media(self, username):
-        medias = self.get_medias(username)
+    def download_all_profile_media(self, user_id):
+        medias = self.get_medias(user_id)
 
         if medias:
-            if os.path.isdir(username):
-                shutil.rmtree(username)
+            if os.path.isdir(user_id):
+                shutil.rmtree(user_id)
 
-            os.mkdir(username)
+            os.mkdir(user_id)
 
             for m in medias:
-                self.download_media(m, username)
+                self.download_media(m, user_id)
 
-            archive_file = username + ".zip"
+            archive_file = user_id + ".zip"
 
             if os.path.isfile(archive_file):
                 os.remove(archive_file)
 
-            archive_folder(username)
+            archive_folder(user_id)
 
-            if os.path.isdir(username):
-                shutil.rmtree(username)
+            if os.path.isdir(user_id):
+                shutil.rmtree(user_id)
 
             return archive_file
 

@@ -31,38 +31,41 @@ class TelegramTools:
 
     def echo(self, update: Update, context: CallbackContext) -> None:
         reply_message = update.message.reply_text('Checking user...')
-        username = update.message.text
-        medias = self.ig_tools.get_medias(username)
+        user_id = self.ig_tools.get_user_id(update.message.text)
 
-        if medias:
-            if os.path.isdir(username):
-                shutil.rmtree(username)
+        if user_id and self.ig_tools.is_public_user(user_id):
+            medias = self.ig_tools.get_medias(user_id)
+            if medias:
+                if os.path.isdir(user_id):
+                    shutil.rmtree(user_id)
 
-            os.mkdir(username)
-            i = 1
-            for m in medias:
-                self.ig_tools.download_media(m, username)
-                msg_text = '{0} medias out of {1} have already been downloaded'.format(
-                    i, len(medias))
-                reply_message.edit_text(text=msg_text)
-                i = i + 1
+                os.mkdir(user_id)
+                i = 1
+                for m in medias:
+                    self.ig_tools.download_media(m, user_id)
+                    msg_text = '{0} medias out of {1} have already been downloaded'.format(
+                        i, len(medias))
+                    reply_message.edit_text(text=msg_text)
+                    i = i + 1
 
-            archive_file = username + '.zip'
+                archive_file = user_id + '.zip'
 
-            if os.path.isfile(archive_file):
-                os.remove(archive_file)
+                if os.path.isfile(archive_file):
+                    os.remove(archive_file)
 
-            archive_folder(username)
+                archive_folder(user_id)
 
-            if os.path.isdir(username):
-                shutil.rmtree(username)
-
-        if os.path.isfile(archive_file):
-            reply_message.edit_text(text='Here is your archive')
-            with open(archive_file, 'rb') as p:
-                update.message.reply_document(p)
+                if os.path.isdir(user_id):
+                    shutil.rmtree(user_id)
 
             if os.path.isfile(archive_file):
-                os.remove(archive_file)
-        else:
-            update.message.reply_text('Wooops, some problem is here...')
+                reply_message.edit_text(text='Here is your archive')
+                with open(archive_file, 'rb') as p:
+                    update.message.reply_document(p)
+
+                if os.path.isfile(archive_file):
+                    os.remove(archive_file)
+
+            return
+
+        update.message.reply_text('Wooops, some problem is here...')
