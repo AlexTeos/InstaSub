@@ -1,9 +1,7 @@
 import unittest
 import os
 from instagrapi import Client
-from instagrapi.exceptions import (
-    LoginRequired
-)
+from instagrapi.exceptions import (LoginRequired, MediaNotFound)
 
 
 class PrivateAccountException(Exception):
@@ -55,22 +53,27 @@ class InstagramTools:
         user = self.client.user_info(user_id)
         return not user.is_private
 
-    def download_media(self, media, path):
+    def download_media(self, media, path='./') -> str:
         if media.media_type == 1:
             # Photo
-            self.client.photo_download(media.pk, path)
+            return self.client.photo_download(media.pk, path)
         elif media.media_type == 2 and media.product_type == 'feed':
             # Video
-            self.client.video_download(media.pk, path)
+            return self.client.video_download(media.pk, path)
         elif media.media_type == 2 and media.product_type == 'igtv':
             # IGTV
-            self.client.video_download(media.pk, path)
+            return self.client.video_download(media.pk, path)
         elif media.media_type == 2 and media.product_type == 'clips':
             # Reels
-            self.client.video_download(media.pk, path)
+            return self.client.video_download(media.pk, path)
         elif media.media_type == 8:
             # Album
-            self.client.album_download(media.pk, path)
+            return self.client.album_download(media.pk, path)
+
+    def download_media_from_url(self, url) -> str:
+        media_pk = self.client.media_pk_from_url(url)
+        media = self.client.media_info(media_pk)
+        return self.download_media(media)
 
 
 class TestInstagramTools(unittest.TestCase):

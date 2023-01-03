@@ -3,7 +3,8 @@ import shutil
 from telegram import Update, Bot
 from telegram.ext import (Updater, CommandHandler, CallbackContext)
 
-from instagramtools import PrivateAccountException, InvalidUsername
+from instagramtools import (PrivateAccountException, InvalidUsername,
+                            MediaNotFound)
 
 
 class TelegramTools:
@@ -17,6 +18,8 @@ class TelegramTools:
         self.dispatcher.add_handler(CommandHandler('help', self.help_command))
         self.dispatcher.add_handler(CommandHandler(
             'download_profile', self.download_profile))
+        self.dispatcher.add_handler(CommandHandler(
+            'download_media', self.download_media))
 
         self.updater.start_polling()
         self.updater.idle()
@@ -24,6 +27,20 @@ class TelegramTools:
     def help_command(self, update: Update, context: CallbackContext) -> None:
         update.message.reply_text(
             'Send me an username and I will send you an archived profile!')
+
+    def download_media(self, update: Update, context: CallbackContext) -> None:
+        try:
+            request = context.args[0]
+            reply_message = update.message.reply_text('Downloading media...')
+            media_path = self.ig_tools.download_media_from_url(request)
+            reply_message.edit_text(text='Here is your media')
+            with open(media_path, 'rb') as document:
+                update.message.reply_document(document)
+            os.remove(media_path)
+        except IndexError:
+            update.message.reply_text('Usage: /download_media link_to_media')
+        except MediaNotFound:
+            reply_message.edit_text('Media not found')
 
     def download_profile(self, update: Update, context: CallbackContext) -> None:
         try:
@@ -59,8 +76,8 @@ class TelegramTools:
             shutil.rmtree(user_id)
 
             reply_message.edit_text(text='Here is your archive')
-            with open(archive_file, 'rb') as p:
-                update.message.reply_document(p)
+            with open(archive_file, 'rb') as document:
+                update.message.reply_document(document)
 
             os.remove(archive_file)
 
