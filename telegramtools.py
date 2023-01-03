@@ -1,12 +1,9 @@
 import os
 import shutil
 from telegram import Update, Bot
-from telegram.ext import (Updater, CommandHandler, MessageHandler, Filters,
-                          CallbackContext)
+from telegram.ext import (Updater, CommandHandler, CallbackContext)
 
-
-def archive_folder(path):
-    shutil.make_archive(path, 'zip', path)
+from instagramtools import PrivateAccountException, InvalidUsername
 
 
 class TelegramTools:
@@ -18,9 +15,8 @@ class TelegramTools:
 
         self.dispatcher.add_handler(CommandHandler('start', self.help_command))
         self.dispatcher.add_handler(CommandHandler('help', self.help_command))
-
-        self.dispatcher.add_handler(MessageHandler(
-            Filters.text & ~Filters.command, self.echo))
+        self.dispatcher.add_handler(CommandHandler(
+            'download_profile', self.download_profile))
 
         self.updater.start_polling()
         self.updater.idle()
@@ -29,43 +25,49 @@ class TelegramTools:
         update.message.reply_text(
             'Send me an username and I will send you an archived profile!')
 
-    def echo(self, update: Update, context: CallbackContext) -> None:
-        reply_message = update.message.reply_text('Checking user...')
-        user_id = self.ig_tools.get_user_id(update.message.text)
+    def download_profile(self, update: Update, context: CallbackContext) -> None:
+        try:
+            request = context.args[0]
+            reply_message = update.message.reply_text('Checking user...')
+            user_id = self.ig_tools.get_user_id(request)
 
-        if user_id and self.ig_tools.is_public_user(user_id):
             medias = self.ig_tools.get_medias(user_id)
-            if medias:
-                if os.path.isdir(user_id):
-                    shutil.rmtree(user_id)
 
-                os.mkdir(user_id)
-                i = 1
-                for m in medias:
-                    self.ig_tools.download_media(m, user_id)
-                    msg_text = '{0} medias out of {1} have already been downloaded'.format(
-                        i, len(medias))
-                    reply_message.edit_text(text=msg_text)
-                    i = i + 1
+            if len(medias) == 0:
+                update.message.reply_text('User don\'t have any media')
+                return None
 
-                archive_file = user_id + '.zip'
+            if os.path.isdir(user_id):
+                shutil.rmtree(user_id)
 
-                if os.path.isfile(archive_file):
-                    os.remove(archive_file)
+            os.mkdir(user_id)
+            i = 1
+            for m in medias:
+                self.ig_tools.download_media(m, user_id)
+                msg_text = '{0} medias out of {1} have already been downloaded'.format(
+                    i, len(medias))
+                reply_message.edit_text(text=msg_text)
+                i = i + 1
 
-                archive_folder(user_id)
-
-                if os.path.isdir(user_id):
-                    shutil.rmtree(user_id)
+            archive_file = user_id + '.zip'
 
             if os.path.isfile(archive_file):
-                reply_message.edit_text(text='Here is your archive')
-                with open(archive_file, 'rb') as p:
-                    update.message.reply_document(p)
+                os.remove(archive_file)
 
-                if os.path.isfile(archive_file):
-                    os.remove(archive_file)
+            shutil.make_archive(user_id, 'zip', user_id)
 
-            return
+            shutil.rmtree(user_id)
 
-        update.message.reply_text('Wooops, some problem is here...')
+            reply_message.edit_text(text='Here is your archive')
+            with open(archive_file, 'rb') as p:
+                update.message.reply_document(p)
+
+            os.remove(archive_file)
+
+        except IndexError:
+            update.message.reply_text(
+                'Usage: /download_profile instagram_user_name')
+        except PrivateAccountException:
+            reply_message.edit_text('The account is private')
+        except InvalidUsername:
+            reply_message.edit_text('Invalid link or username')

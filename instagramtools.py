@@ -1,14 +1,17 @@
 import unittest
 import os
-import shutil
 from instagrapi import Client
 from instagrapi.exceptions import (
     LoginRequired
 )
 
 
-def archive_folder(path):
-    shutil.make_archive(path, 'zip', path)
+class PrivateAccountException(Exception):
+    "You are trying to interract with a private user"
+
+
+class InvalidUsername(Exception):
+    "Invalid link or username"
 
 
 class InstagramTools:
@@ -34,18 +37,21 @@ class InstagramTools:
         while '' in username:
             username.remove('')
 
-        if len(username):
-            return username.pop()
+        if len(username) == 0:
+            raise InvalidUsername
+
+        return username.pop()
 
     def get_user_id(self, username):
-        username = self.extract_username(username)
-        if username:
-            return self.client.user_id_from_username(username)
+        return self.client.user_id_from_username(self.extract_username(
+            username))
 
     def get_medias(self, user_id):
+        if not self.is_public_account(user_id):
+            raise PrivateAccountException
         return self.client.user_medias(user_id)
 
-    def is_public_user(self, user_id):
+    def is_public_account(self, user_id):
         user = self.client.user_info(user_id)
         return not user.is_private
 
@@ -65,32 +71,6 @@ class InstagramTools:
         elif media.media_type == 8:
             # Album
             self.client.album_download(media.pk, path)
-
-    def download_all_profile_media(self, user_id):
-        medias = self.get_medias(user_id)
-
-        if medias:
-            if os.path.isdir(user_id):
-                shutil.rmtree(user_id)
-
-            os.mkdir(user_id)
-
-            for m in medias:
-                self.download_media(m, user_id)
-
-            archive_file = user_id + ".zip"
-
-            if os.path.isfile(archive_file):
-                os.remove(archive_file)
-
-            archive_folder(user_id)
-
-            if os.path.isdir(user_id):
-                shutil.rmtree(user_id)
-
-            return archive_file
-
-        return None
 
 
 class TestInstagramTools(unittest.TestCase):
@@ -129,10 +109,6 @@ class TestInstagramTools(unittest.TestCase):
             'instagram.com/instagram_username'), 'instagram_username')
         self.assertEqual(InstagramTools.extract_username(
             'instagram.com/instagram_username'), 'instagram_username')
-
-    def test_download_all_profile_media(self):
-        self.assertEqual(self.ig_tools.download_all_profile_media(
-            'https://www.instagram.com/username/'), 'username.zip')
 
 
 if __name__ == '__main__':
