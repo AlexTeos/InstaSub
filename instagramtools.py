@@ -53,24 +53,24 @@ class InstagramTools:
         user = self.client.user_info(user_id)
         return not user.is_private
 
-    def download_media(self, media, path='./') -> str:
+    def download_media(self, media, path='./') -> list:
         if media.media_type == 1:
             # Photo
-            return self.client.photo_download(media.pk, path)
+            return [self.client.photo_download(media.pk, path)]
         elif media.media_type == 2 and media.product_type == 'feed':
             # Video
-            return self.client.video_download(media.pk, path)
+            return [self.client.video_download(media.pk, path)]
         elif media.media_type == 2 and media.product_type == 'igtv':
             # IGTV
-            return self.client.video_download(media.pk, path)
+            return [self.client.video_download(media.pk, path)]
         elif media.media_type == 2 and media.product_type == 'clips':
             # Reels
-            return self.client.video_download(media.pk, path)
+            return [self.client.video_download(media.pk, path)]
         elif media.media_type == 8:
             # Album
             return self.client.album_download(media.pk, path)
 
-    def download_media_from_url(self, url) -> str:
+    def download_media_from_url(self, url) -> list:
         media_pk = self.client.media_pk_from_url(url)
         media = self.client.media_info(media_pk)
         return self.download_media(media)

@@ -1,13 +1,13 @@
 import os
-import shutil
-from telegram import Update, Bot
+import zipfile
+from telegram import Update, Bot, InputMediaPhoto, InputMediaVideo
 from telegram.ext import (Updater, CommandHandler, CallbackContext)
-
 from instagramtools import (PrivateAccountException, InvalidUsername,
                             MediaNotFound)
 
 
 class TelegramTools:
+    FILE_SIZE_LIMIT = 50 * 1024 * 1024
     def __init__(self, bot_token, ig_tools):
         self.ig_tools = ig_tools
         self.bot = Bot(bot_token)
@@ -32,11 +32,21 @@ class TelegramTools:
         try:
             request = context.args[0]
             reply_message = update.message.reply_text('Downloading media...')
-            media_path = self.ig_tools.download_media_from_url(request)
+            media_paths = self.ig_tools.download_media_from_url(request)
+            medias = []
+            for media_path in media_paths:
+                if str(media_path).endswith('.mp4'):
+                    medias.append(InputMediaVideo(
+                        media=open(media_path, 'rb')))
+                else:
+                    medias.append(InputMediaPhoto(
+                        media=open(media_path, 'rb')))
             reply_message.edit_text(text='Here is your media')
-            with open(media_path, 'rb') as document:
-                update.message.reply_document(document)
-            os.remove(media_path)
+            update.message.reply_media_group(medias)
+
+            for media_path in media_paths:
+                os.remove(media_path)
+
         except IndexError:
             update.message.reply_text('Usage: /download_media link_to_media')
         except MediaNotFound:
@@ -54,32 +64,49 @@ class TelegramTools:
                 update.message.reply_text('User don\'t have any media')
                 return None
 
-            if os.path.isdir(user_id):
-                shutil.rmtree(user_id)
+            archive_name = None
+            archive_file = None
+            media_counter = 1
+            archive_counter = 1
+            size_sum = 0
+            for media in medias:
+                files = self.ig_tools.download_media(media)
+                for file in files:
+                    file_size = os.stat(file).st_size
+                    if file_size >= self.FILE_SIZE_LIMIT:
+                        os.remove(file)
+                        continue
 
-            os.mkdir(user_id)
-            i = 1
-            for m in medias:
-                self.ig_tools.download_media(m, user_id)
-                msg_text = '{0} medias out of {1} have already been downloaded'.format(
-                    i, len(medias))
+                    if file_size + size_sum >= self.FILE_SIZE_LIMIT:
+                        archive_file.close()
+                        with open(archive_name, 'rb') as document:
+                            update.message.reply_document(document)
+                        os.remove(archive_name)
+                        archive_name = None
+                        archive_counter = archive_counter + 1
+                        size_sum = 0
+
+                    if archive_name is None:
+                        archive_name = user_id + '_' + \
+                            str(archive_counter) + '.zip'
+                        archive_file = zipfile.ZipFile(archive_name, 'w')
+
+                    archive_file.write(file.name)
+                    size_sum += file_size
+                    os.remove(file)
+                msg_text = '{0} posts out of {1} have been downloaded'.format(
+                    media_counter, len(medias))
                 reply_message.edit_text(text=msg_text)
-                i = i + 1
+                media_counter = media_counter + 1
 
-            archive_file = user_id + '.zip'
+            if archive_name and archive_file:
+                archive_file.close()
+                with open(archive_name, 'rb') as document:
+                    update.message.reply_document(document)
+                os.remove(archive_name)
 
-            if os.path.isfile(archive_file):
-                os.remove(archive_file)
-
-            shutil.make_archive(user_id, 'zip', user_id)
-
-            shutil.rmtree(user_id)
-
-            reply_message.edit_text(text='Here is your archive')
-            with open(archive_file, 'rb') as document:
-                update.message.reply_document(document)
-
-            os.remove(archive_file)
+            reply_message.edit_text(text='Download completed with {0} posts and {1} archives'.format(
+                media_counter - 1, archive_counter))
 
         except IndexError:
             update.message.reply_text(
