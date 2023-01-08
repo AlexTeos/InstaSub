@@ -1,5 +1,6 @@
 import unittest
 import os
+from pathlib import Path
 from instagrapi import Client
 from instagrapi.exceptions import (LoginRequired, MediaNotFound)
 
@@ -75,6 +76,9 @@ class InstagramTools:
         media = self.client.media_info(media_pk)
         return self.download_media(media)
 
+    def download_story_from_url(self, url) -> Path:
+        return self.client.story_download(self.client.story_pk_from_url(url))
+
 
 class TestInstagramTools(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -82,8 +86,8 @@ class TestInstagramTools(unittest.TestCase):
         self.ig_tools = InstagramTools('username', 'password')
 
     def test_extract_username(self):
-        self.assertEqual(InstagramTools.extract_username(
-            '//'), None)
+        self.assertRaises(
+            InvalidUsername, InstagramTools.extract_username, '//')
         self.assertEqual(InstagramTools.extract_username(
             'instagram_username'), 'instagram_username')
         self.assertEqual(InstagramTools.extract_username(

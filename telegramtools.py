@@ -8,6 +8,7 @@ from instagramtools import (PrivateAccountException, InvalidUsername,
 
 class TelegramTools:
     FILE_SIZE_LIMIT = 50 * 1024 * 1024
+
     def __init__(self, bot_token, ig_tools):
         self.ig_tools = ig_tools
         self.bot = Bot(bot_token)
@@ -20,6 +21,8 @@ class TelegramTools:
             'download_profile', self.download_profile))
         self.dispatcher.add_handler(CommandHandler(
             'download_media', self.download_media))
+        self.dispatcher.add_handler(CommandHandler(
+            'download_story', self.download_story))
 
         self.updater.start_polling()
         self.updater.idle()
@@ -27,6 +30,23 @@ class TelegramTools:
     def help_command(self, update: Update, context: CallbackContext) -> None:
         update.message.reply_text(
             'Send me an username and I will send you an archived profile!')
+
+    def download_story(self, update: Update, context: CallbackContext) -> None:
+        try:
+            request = context.args[0]
+            reply_message = update.message.reply_text('Downloading story...')
+            story_path = self.ig_tools.download_story_from_url(request)
+            reply_message.edit_text(text='Here is your story')
+            if str(story_path).endswith('.mp4'):
+                with open(story_path, 'rb') as story_file:
+                    update.message.reply_video(story_file)
+            else:
+                with open(story_path, 'rb') as story_file:
+                    update.message.reply_photo(story_file)
+
+            os.remove(story_path)
+        except IndexError:
+            update.message.reply_text('Usage: /download_story link_to_story')
 
     def download_media(self, update: Update, context: CallbackContext) -> None:
         try:
