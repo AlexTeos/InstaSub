@@ -18,11 +18,13 @@ class TelegramTools:
         self.dispatcher.add_handler(CommandHandler('start', self.help_command))
         self.dispatcher.add_handler(CommandHandler('help', self.help_command))
         self.dispatcher.add_handler(CommandHandler(
-            'download_profile', self.download_profile))
+            'profile_download', self.download_profile))
         self.dispatcher.add_handler(CommandHandler(
-            'download_media', self.download_media))
+            'media_download', self.download_media))
         self.dispatcher.add_handler(CommandHandler(
-            'download_story', self.download_story))
+            'story_download', self.download_story))
+        self.dispatcher.add_handler(CommandHandler(
+            'highlight_download', self.download_highlight))
 
         self.updater.start_polling()
         self.updater.idle()
@@ -46,7 +48,7 @@ class TelegramTools:
 
             os.remove(story_path)
         except IndexError:
-            update.message.reply_text('Usage: /download_story link_to_story')
+            update.message.reply_text('Usage: /story_download link_to_story')
 
     def download_media(self, update: Update, context: CallbackContext) -> None:
         try:
@@ -68,9 +70,43 @@ class TelegramTools:
                 os.remove(media_path)
 
         except IndexError:
-            update.message.reply_text('Usage: /download_media link_to_media')
+            update.message.reply_text('Usage: /media_download link_to_media')
         except MediaNotFound:
             reply_message.edit_text('Media not found')
+
+    def download_highlight(self, update: Update, context: CallbackContext) -> None:
+        try:
+            request = context.args[0]
+            reply_message = update.message.reply_text(
+                'Downloading highlight...')
+            highlight_paths = self.ig_tools.download_highlights_from_url(
+                request)
+            reply_message.edit_text(text='Here is your highlights')
+            highlights = []
+            highlight_counter = 0
+            highlight_index = 0
+            for highlight_path in highlight_paths:
+                if str(highlight_path).endswith('.mp4'):
+                    highlights.append(InputMediaVideo(
+                        media=open(highlight_path, 'rb')))
+                else:
+                    highlights.append(InputMediaPhoto(
+                        media=open(highlight_path, 'rb')))
+
+                highlight_counter = highlight_counter + 1
+                highlight_index = highlight_index + 1
+
+                if highlight_counter == 10 or highlight_index == len(highlight_paths):
+                    update.message.reply_media_group(highlights)
+                    highlights = []
+                    highlight_counter = 0
+
+            for highlight_path in highlight_paths:
+                os.remove(highlight_path)
+
+        except IndexError:
+            update.message.reply_text(
+                'Usage: /highlight_download link_to_highlight')
 
     def download_profile(self, update: Update, context: CallbackContext) -> None:
         try:
@@ -130,7 +166,7 @@ class TelegramTools:
 
         except IndexError:
             update.message.reply_text(
-                'Usage: /download_profile instagram_user_name')
+                'Usage: /profile_download instagram_user_name')
         except PrivateAccountException:
             reply_message.edit_text('The account is private')
         except InvalidUsername:

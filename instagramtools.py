@@ -54,22 +54,13 @@ class InstagramTools:
         user = self.client.user_info(user_id)
         return not user.is_private
 
-    def download_media(self, media, path='./') -> list:
+    def download_media(self, media) -> list:
         if media.media_type == 1:
-            # Photo
-            return [self.client.photo_download(media.pk, path)]
-        elif media.media_type == 2 and media.product_type == 'feed':
-            # Video
-            return [self.client.video_download(media.pk, path)]
-        elif media.media_type == 2 and media.product_type == 'igtv':
-            # IGTV
-            return [self.client.video_download(media.pk, path)]
-        elif media.media_type == 2 and media.product_type == 'clips':
-            # Reels
-            return [self.client.video_download(media.pk, path)]
+            return [self.client.photo_download(media.pk)]
+        elif media.media_type == 2:
+            return [self.client.video_download(media.pk)]
         elif media.media_type == 8:
-            # Album
-            return self.client.album_download(media.pk, path)
+            return self.client.album_download(media.pk)
 
     def download_media_from_url(self, url) -> list:
         media_pk = self.client.media_pk_from_url(url)
@@ -78,6 +69,18 @@ class InstagramTools:
 
     def download_story_from_url(self, url) -> Path:
         return self.client.story_download(self.client.story_pk_from_url(url))
+
+    def download_highlights_from_url(self, url):
+        highlight = self.client.highlight_pk_from_url(url)
+        info = self.client.highlight_info(highlight)
+        paths = []
+        for item in info.items:
+            if item.media_type == 1:
+                paths.append(self.client.photo_download_by_url(
+                    item.thumbnail_url))
+            elif item.media_type == 2:
+                paths.append(self.client.video_download_by_url(item.video_url))
+        return paths
 
 
 class TestInstagramTools(unittest.TestCase):
