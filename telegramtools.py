@@ -2,8 +2,9 @@ import os
 import shutil
 import zipfile
 from telegram import Update, Bot, InputMediaPhoto, InputMediaVideo
-from telegram.ext import (Updater, CommandHandler, CallbackContext)
-from instagramtools import (PrivateAccountException, InvalidUsername,
+from telegram.ext import (Updater, CommandHandler, CallbackContext, Filters,
+                          MessageHandler)
+from instagramtools import (PrivateAccountException, UserNotFound,
                             MediaNotFound, HighlightNotFound)
 
 
@@ -18,14 +19,8 @@ class TelegramTools:
 
         self.dispatcher.add_handler(CommandHandler('start', self.help_command))
         self.dispatcher.add_handler(CommandHandler('help', self.help_command))
-        self.dispatcher.add_handler(CommandHandler(
-            'profile_download', self.download_profile))
-        self.dispatcher.add_handler(CommandHandler(
-            'media_download', self.download_media))
-        self.dispatcher.add_handler(CommandHandler(
-            'story_download', self.download_story))
-        self.dispatcher.add_handler(CommandHandler(
-            'highlight_download', self.download_highlight))
+        self.dispatcher.add_handler(MessageHandler(
+            Filters.text & ~Filters.command, self.resolve_command))
 
         self.updater.start_polling()
         self.updater.idle()
@@ -34,11 +29,25 @@ class TelegramTools:
         update.message.reply_text(
             'Send me an username and I will send you an archived profile!')
 
+    def resolve_command(self, update: Update, context: CallbackContext) -> None:
+        if '/highlights/' in update.message.text:
+            return self.download_highlight(update, context)
+        elif '/stories/' in update.message.text:
+            return self.download_story(update, context)
+        elif '/p/' in update.message.text:
+            return self.download_media(update, context)
+        else:
+            try:
+                return self.download_profile(update, context)
+            except UserNotFound:
+                reply_message = update.message.reply_text(
+                    'I don\'t know what to do with that. Try something else')
+
     def download_story(self, update: Update, context: CallbackContext) -> None:
         try:
-            request = context.args[0]
             reply_message = update.message.reply_text('Downloading story...')
-            story_path = self.ig_tools.download_story_from_url(request)
+            story_path = self.ig_tools.download_story_from_url(
+                update.message.text)
             reply_message.edit_text('Here is your story')
             if str(story_path).endswith('.mp4'):
                 with open(story_path, 'rb') as story_file:
@@ -48,16 +57,14 @@ class TelegramTools:
                     update.message.reply_photo(story_file)
 
             os.remove(story_path)
-        except IndexError:
-            update.message.reply_text('Usage: /story_download link_to_story')
         except MediaNotFound:
             reply_message.edit_text('Story not found')
 
     def download_media(self, update: Update, context: CallbackContext) -> None:
         try:
-            request = context.args[0]
             reply_message = update.message.reply_text('Downloading media...')
-            media_paths = self.ig_tools.download_media_from_url(request)
+            media_paths = self.ig_tools.download_media_from_url(
+                update.message.text)
             medias = []
             for media_path in media_paths:
                 if str(media_path).endswith('.mp4'):
@@ -72,18 +79,15 @@ class TelegramTools:
             for media_path in media_paths:
                 os.remove(media_path)
 
-        except IndexError:
-            update.message.reply_text('Usage: /media_download link_to_media')
         except MediaNotFound:
             reply_message.edit_text('Media not found')
 
     def download_highlight(self, update: Update, context: CallbackContext) -> None:
         try:
-            request = context.args[0]
             reply_message = update.message.reply_text(
                 'Downloading highlight...')
             highlight_paths = self.ig_tools.download_highlights_from_url(
-                request)
+                update.message.text)
             reply_message.edit_text('Here is your highlights')
             highlights = []
             highlight_counter = 0
@@ -107,17 +111,13 @@ class TelegramTools:
             for highlight_path in highlight_paths:
                 os.remove(highlight_path)
 
-        except IndexError:
-            update.message.reply_text(
-                'Usage: /highlight_download link_to_highlight')
         except HighlightNotFound:
             reply_message.edit_text('Highlight not found')
 
     def download_profile(self, update: Update, context: CallbackContext) -> None:
         try:
-            request = context.args[0]
             reply_message = update.message.reply_text('Checking user...')
-            user_id = self.ig_tools.get_user_id(request)
+            user_id = self.ig_tools.get_user_id(update.message.text)
 
             # Media
             medias = self.ig_tools.get_medias(user_id)
@@ -207,10 +207,8 @@ class TelegramTools:
             reply_message.edit_text('Download completed with {0} posts & highlights and {1} archives'.format(
                 media_counter + highlight_counter - 2, archive_counter))
 
-        except IndexError:
-            update.message.reply_text(
-                'Usage: /profile_download instagram_user_name')
         except PrivateAccountException:
             reply_message.edit_text('The account is private')
-        except InvalidUsername:
+        except UserNotFound:
             reply_message.edit_text('Invalid link or username')
+            raise

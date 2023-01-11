@@ -2,16 +2,12 @@ import unittest
 import os
 from pathlib import Path
 from instagrapi import Client
-from instagrapi.exceptions import (
-    LoginRequired, MediaNotFound, HighlightNotFound)
+from instagrapi.exceptions import (LoginRequired, MediaNotFound,
+                                   HighlightNotFound, UserNotFound)
 
 
 class PrivateAccountException(Exception):
     "You are trying to interract with a private user"
-
-
-class InvalidUsername(Exception):
-    "Invalid link or username"
 
 
 class InstagramTools:
@@ -38,7 +34,7 @@ class InstagramTools:
             username.remove('')
 
         if len(username) == 0:
-            raise InvalidUsername
+            raise UserNotFound
 
         return username.pop()
 

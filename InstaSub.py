@@ -1,4 +1,3 @@
-from pathlib import Path
 import argparse
 from instagramtools import InstagramTools
 from telegramtools import TelegramTools
