@@ -1,9 +1,10 @@
 import os
+import shutil
 import zipfile
 from telegram import Update, Bot, InputMediaPhoto, InputMediaVideo
 from telegram.ext import (Updater, CommandHandler, CallbackContext)
 from instagramtools import (PrivateAccountException, InvalidUsername,
-                            MediaNotFound)
+                            MediaNotFound, HighlightNotFound)
 
 
 class TelegramTools:
@@ -38,7 +39,7 @@ class TelegramTools:
             request = context.args[0]
             reply_message = update.message.reply_text('Downloading story...')
             story_path = self.ig_tools.download_story_from_url(request)
-            reply_message.edit_text(text='Here is your story')
+            reply_message.edit_text('Here is your story')
             if str(story_path).endswith('.mp4'):
                 with open(story_path, 'rb') as story_file:
                     update.message.reply_video(story_file)
@@ -49,6 +50,8 @@ class TelegramTools:
             os.remove(story_path)
         except IndexError:
             update.message.reply_text('Usage: /story_download link_to_story')
+        except MediaNotFound:
+            reply_message.edit_text('Story not found')
 
     def download_media(self, update: Update, context: CallbackContext) -> None:
         try:
@@ -63,7 +66,7 @@ class TelegramTools:
                 else:
                     medias.append(InputMediaPhoto(
                         media=open(media_path, 'rb')))
-            reply_message.edit_text(text='Here is your media')
+            reply_message.edit_text('Here is your media')
             update.message.reply_media_group(medias)
 
             for media_path in media_paths:
@@ -81,7 +84,7 @@ class TelegramTools:
                 'Downloading highlight...')
             highlight_paths = self.ig_tools.download_highlights_from_url(
                 request)
-            reply_message.edit_text(text='Here is your highlights')
+            reply_message.edit_text('Here is your highlights')
             highlights = []
             highlight_counter = 0
             highlight_index = 0
@@ -107,6 +110,8 @@ class TelegramTools:
         except IndexError:
             update.message.reply_text(
                 'Usage: /highlight_download link_to_highlight')
+        except HighlightNotFound:
+            reply_message.edit_text('Highlight not found')
 
     def download_profile(self, update: Update, context: CallbackContext) -> None:
         try:
@@ -114,11 +119,8 @@ class TelegramTools:
             reply_message = update.message.reply_text('Checking user...')
             user_id = self.ig_tools.get_user_id(request)
 
+            # Media
             medias = self.ig_tools.get_medias(user_id)
-
-            if len(medias) == 0:
-                update.message.reply_text('User don\'t have any media')
-                return None
 
             archive_name = None
             archive_file = None
@@ -126,7 +128,7 @@ class TelegramTools:
             archive_counter = 1
             size_sum = 0
             for media in medias:
-                files = self.ig_tools.download_media(media)
+                files = self.ig_tools.download_media(media, user_id + '/')
                 for file in files:
                     file_size = os.stat(file).st_size
                     if file_size >= self.FILE_SIZE_LIMIT:
@@ -147,13 +149,51 @@ class TelegramTools:
                             str(archive_counter) + '.zip'
                         archive_file = zipfile.ZipFile(archive_name, 'w')
 
-                    archive_file.write(file.name)
+                    archive_file.write(file, os.path.relpath(file, user_id))
                     size_sum += file_size
                     os.remove(file)
                 msg_text = '{0} posts out of {1} have been downloaded'.format(
                     media_counter, len(medias))
-                reply_message.edit_text(text=msg_text)
+                reply_message.edit_text(msg_text)
                 media_counter = media_counter + 1
+
+            # Highlight
+            highlights = self.ig_tools.get_highlights(user_id)
+            highlight_counter = 1
+            for highlight in highlights:
+                files = self.ig_tools.download_highlight(
+                    highlight.pk, user_id + '/')
+                for file in files:
+                    file_size = os.stat(file).st_size
+                    if file_size >= self.FILE_SIZE_LIMIT:
+                        os.remove(file)
+                        continue
+
+                    if file_size + size_sum >= self.FILE_SIZE_LIMIT:
+                        archive_file.close()
+                        with open(archive_name, 'rb') as document:
+                            update.message.reply_document(document)
+                        os.remove(archive_name)
+                        archive_name = None
+                        archive_counter = archive_counter + 1
+                        size_sum = 0
+
+                    if archive_name is None:
+                        archive_name = user_id + '_' + \
+                            str(archive_counter) + '.zip'
+                        archive_file = zipfile.ZipFile(archive_name, 'w')
+
+                    archive_file.write(file, os.path.relpath(file, user_id))
+                    size_sum += file_size
+                    os.remove(file)
+                msg_text = '{0} highlights out of {1} have been downloaded'.format(
+                    highlight_counter, len(highlights))
+                reply_message.edit_text(msg_text)
+                highlight_counter = highlight_counter + 1
+
+            if media_counter + highlight_counter == 2:
+                reply_message.edit_text('User don\'t have any media')
+                return None
 
             if archive_name and archive_file:
                 archive_file.close()
@@ -161,8 +201,11 @@ class TelegramTools:
                     update.message.reply_document(document)
                 os.remove(archive_name)
 
-            reply_message.edit_text(text='Download completed with {0} posts and {1} archives'.format(
-                media_counter - 1, archive_counter))
+            if not os.path.exists(user_id):
+                shutil.rmtree(user_id)
+
+            reply_message.edit_text('Download completed with {0} posts & highlights and {1} archives'.format(
+                media_counter + highlight_counter - 2, archive_counter))
 
         except IndexError:
             update.message.reply_text(
