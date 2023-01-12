@@ -34,7 +34,7 @@ class TelegramTools:
             return self.download_highlight(update, context)
         elif '/stories/' in update.message.text:
             return self.download_story(update, context)
-        elif '/p/' in update.message.text:
+        elif '/p/' in update.message.text or '/reel/' in update.message.text:
             return self.download_media(update, context)
         else:
             try:
