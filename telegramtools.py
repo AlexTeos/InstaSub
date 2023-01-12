@@ -119,16 +119,16 @@ class TelegramTools:
             reply_message = update.message.reply_text('Checking user...')
             user_id = self.ig_tools.get_user_id(update.message.text)
 
-            # Media
-            medias = self.ig_tools.get_medias(user_id)
-
             archive_name = None
             archive_file = None
-            media_counter = 1
             archive_counter = 1
             size_sum = 0
+            # Media
+            medias = self.ig_tools.get_user_medias(user_id)
+            media_counter = 1
             for media in medias:
-                files = self.ig_tools.download_media(media, user_id + '/')
+                files = self.ig_tools.download_media(
+                    media, user_id + '/media/')
                 for file in files:
                     file_size = os.stat(file).st_size
                     if file_size >= self.FILE_SIZE_LIMIT:
@@ -157,12 +157,46 @@ class TelegramTools:
                 reply_message.edit_text(msg_text)
                 media_counter = media_counter + 1
 
+            # Tagged media
+            tagged_medias = self.ig_tools.get_user_tagged_medias(user_id)
+            tagged_media_counter = 1
+            for tagged_media in tagged_medias:
+                files = self.ig_tools.download_media(
+                    tagged_media, user_id + '/tagged_media/')
+                for file in files:
+                    file_size = os.stat(file).st_size
+                    if file_size >= self.FILE_SIZE_LIMIT:
+                        os.remove(file)
+                        continue
+
+                    if file_size + size_sum >= self.FILE_SIZE_LIMIT:
+                        archive_file.close()
+                        with open(archive_name, 'rb') as document:
+                            update.message.reply_document(document)
+                        os.remove(archive_name)
+                        archive_name = None
+                        archive_counter = archive_counter + 1
+                        size_sum = 0
+
+                    if archive_name is None:
+                        archive_name = user_id + '_' + \
+                            str(archive_counter) + '.zip'
+                        archive_file = zipfile.ZipFile(archive_name, 'w')
+
+                    archive_file.write(file, os.path.relpath(file, user_id))
+                    size_sum += file_size
+                    os.remove(file)
+                msg_text = '{0} tagged posts out of {1} have been downloaded'.format(
+                    tagged_media_counter, len(tagged_medias))
+                reply_message.edit_text(msg_text)
+                tagged_media_counter = tagged_media_counter + 1
+
             # Highlight
             highlights = self.ig_tools.get_highlights(user_id)
             highlight_counter = 1
             for highlight in highlights:
                 files = self.ig_tools.download_highlight(
-                    highlight.pk, user_id + '/')
+                    highlight.pk, user_id + '/highlights/')
                 for file in files:
                     file_size = os.stat(file).st_size
                     if file_size >= self.FILE_SIZE_LIMIT:
@@ -205,7 +239,7 @@ class TelegramTools:
                 shutil.rmtree(user_id)
 
             reply_message.edit_text('Download completed with {0} posts & highlights and {1} archives'.format(
-                media_counter + highlight_counter - 2, archive_counter))
+                media_counter + tagged_media_counter + highlight_counter - 2, archive_counter))
 
         except PrivateAccountException:
             reply_message.edit_text('The account is private')

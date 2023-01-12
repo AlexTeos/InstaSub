@@ -42,10 +42,15 @@ class InstagramTools:
         return self.client.user_id_from_username(self.extract_username(
             username))
 
-    def get_medias(self, user_id):
+    def get_user_medias(self, user_id):
         if not self.is_public_account(user_id):
             raise PrivateAccountException
         return self.client.user_medias(user_id)
+
+    def get_user_tagged_medias(self, user_id):
+        if not self.is_public_account(user_id):
+            raise PrivateAccountException
+        return self.client.usertag_medias(user_id)
 
     def is_public_account(self, user_id):
         user = self.client.user_info(user_id)
@@ -54,7 +59,7 @@ class InstagramTools:
     def download_media(self, media, path=None) -> list:
         download_path = ''
         if path:
-            download_path = path + 'media/' + str(media.pk)
+            download_path = path + str(media.pk)
             if not os.path.exists(download_path):
                 os.makedirs(download_path)
         if media.media_type == 1:
@@ -78,7 +83,7 @@ class InstagramTools:
     def download_highlight(self, highlight, path=None) -> list:
         download_path = ''
         if path:
-            download_path = path + 'highlights/' + str(highlight)
+            download_path = path + str(highlight)
             if not os.path.exists(download_path):
                 os.makedirs(download_path)
         info = self.client.highlight_info(highlight)
@@ -103,7 +108,7 @@ class TestInstagramTools(unittest.TestCase):
 
     def test_extract_username(self):
         self.assertRaises(
-            InvalidUsername, InstagramTools.extract_username, '//')
+            UserNotFound, InstagramTools.extract_username, '//')
         self.assertEqual(InstagramTools.extract_username(
             'instagram_username'), 'instagram_username')
         self.assertEqual(InstagramTools.extract_username(
