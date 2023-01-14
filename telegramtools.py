@@ -46,15 +46,12 @@ class TelegramTools:
     def download_story(self, update: Update, context: CallbackContext) -> None:
         try:
             reply_message = update.message.reply_text('Downloading story...')
-            story_path = self.ig_tools.download_story_from_url(
-                update.message.text)
+            story_path = self.ig_tools.download_story_from_url(update.message.text)
             reply_message.edit_text('Here is your story')
             if str(story_path).endswith('.mp4'):
-                with open(story_path, 'rb') as story_file:
-                    update.message.reply_video(story_file)
+                update.message.reply_video(open(story_path, 'rb'))
             else:
-                with open(story_path, 'rb') as story_file:
-                    update.message.reply_photo(story_file)
+                update.message.reply_photo(open(story_path, 'rb'))
 
             os.remove(story_path)
         except MediaNotFound:
@@ -63,16 +60,13 @@ class TelegramTools:
     def download_media(self, update: Update, context: CallbackContext) -> None:
         try:
             reply_message = update.message.reply_text('Downloading media...')
-            media_paths = self.ig_tools.download_media_from_url(
-                update.message.text)
+            media_paths = self.ig_tools.download_media_from_url(update.message.text)
             medias = []
             for media_path in media_paths:
                 if str(media_path).endswith('.mp4'):
-                    medias.append(InputMediaVideo(
-                        media=open(media_path, 'rb')))
+                    medias.append(InputMediaVideo(media=open(media_path, 'rb')))
                 else:
-                    medias.append(InputMediaPhoto(
-                        media=open(media_path, 'rb')))
+                    medias.append(InputMediaPhoto(media=open(media_path, 'rb')))
             reply_message.edit_text('Here is your media')
             update.message.reply_media_group(medias)
 
@@ -84,21 +78,17 @@ class TelegramTools:
 
     def download_highlight(self, update: Update, context: CallbackContext) -> None:
         try:
-            reply_message = update.message.reply_text(
-                'Downloading highlight...')
-            highlight_paths = self.ig_tools.download_highlights_from_url(
-                update.message.text)
+            reply_message = update.message.reply_text('Downloading highlight...')
+            highlight_paths = self.ig_tools.download_highlights_from_url(update.message.text)
             reply_message.edit_text('Here is your highlights')
             highlights = []
             highlight_counter = 0
             highlight_index = 0
             for highlight_path in highlight_paths:
                 if str(highlight_path).endswith('.mp4'):
-                    highlights.append(InputMediaVideo(
-                        media=open(highlight_path, 'rb')))
+                    highlights.append(InputMediaVideo(media=open(highlight_path, 'rb')))
                 else:
-                    highlights.append(InputMediaPhoto(
-                        media=open(highlight_path, 'rb')))
+                    highlights.append(InputMediaPhoto(media=open(highlight_path, 'rb')))
 
                 highlight_counter = highlight_counter + 1
                 highlight_index = highlight_index + 1
@@ -114,132 +104,111 @@ class TelegramTools:
         except HighlightNotFound:
             reply_message.edit_text('Highlight not found')
 
+    class SplitArchiver:
+        file = None
+        counter = 1
+        size = 0
+        __SIZE_LIMIT = 0
+        base_name = None
+
+        def __init__(self, base_name, file_size_limit):
+            self.base_name = base_name
+            self.__SIZE_LIMIT = file_size_limit
+            pass
+
+        def write(self, file, path) -> str:
+            name = None
+            file_size = os.stat(file).st_size
+            if file_size >= self.__SIZE_LIMIT:
+                os.remove(file)
+                return None
+
+            if file_size + self.size >= self.__SIZE_LIMIT:
+                name = self.close()
+
+            if self.file is None:
+                self.file = zipfile.ZipFile(self.base_name + '_' + str(self.counter) + '.zip', 'w')
+
+            self.file.write(file, path)
+            self.size += file_size
+            os.remove(file)
+
+            return name
+
+        def close(self) -> str:
+            if self.file:
+                self.file.close()
+                name = self.file.filename
+                self.file = None
+                if self.size:
+                    self.counter = self.counter + 1
+                    self.size = 0
+                    return name
+            return None
+
     def download_profile(self, update: Update, context: CallbackContext) -> None:
         try:
             reply_message = update.message.reply_text('Checking user...')
             user_id = self.ig_tools.get_user_id(update.message.text)
+            archiver = self.SplitArchiver(user_id, self.FILE_SIZE_LIMIT)
 
-            archive_name = None
-            archive_file = None
-            archive_counter = 1
-            size_sum = 0
             # Media
             medias = self.ig_tools.get_user_medias(user_id)
-            media_counter = 1
+            media_counter = 0
             for media in medias:
-                files = self.ig_tools.download_media(
-                    media, user_id + '/media/')
+                files = self.ig_tools.download_media(media, user_id + '/media/')
                 for file in files:
-                    file_size = os.stat(file).st_size
-                    if file_size >= self.FILE_SIZE_LIMIT:
-                        os.remove(file)
-                        continue
-
-                    if file_size + size_sum >= self.FILE_SIZE_LIMIT:
-                        archive_file.close()
-                        with open(archive_name, 'rb') as document:
-                            update.message.reply_document(document)
-                        os.remove(archive_name)
-                        archive_name = None
-                        archive_counter = archive_counter + 1
-                        size_sum = 0
-
-                    if archive_name is None:
-                        archive_name = user_id + '_' + \
-                            str(archive_counter) + '.zip'
-                        archive_file = zipfile.ZipFile(archive_name, 'w')
-
-                    archive_file.write(file, os.path.relpath(file, user_id))
-                    size_sum += file_size
-                    os.remove(file)
-                msg_text = '{0} posts out of {1} have been downloaded'.format(
-                    media_counter, len(medias))
-                reply_message.edit_text(msg_text)
+                    archive = archiver.write(file, os.path.relpath(file, user_id))
+                    if archive:
+                        update.message.reply_document(open(archive, 'rb'))
+                        os.remove(archive)
+                reply_message.edit_text(
+                    '{0} posts out of {1} have been downloaded'.format(media_counter + 1, len(medias)))
                 media_counter = media_counter + 1
 
             # Tagged media
             tagged_medias = self.ig_tools.get_user_tagged_medias(user_id)
-            tagged_media_counter = 1
+            tagged_media_counter = 0
             for tagged_media in tagged_medias:
-                files = self.ig_tools.download_media(
-                    tagged_media, user_id + '/tagged_media/')
+                files = self.ig_tools.download_media(tagged_media, user_id + '/tagged_media/')
                 for file in files:
-                    file_size = os.stat(file).st_size
-                    if file_size >= self.FILE_SIZE_LIMIT:
-                        os.remove(file)
-                        continue
-
-                    if file_size + size_sum >= self.FILE_SIZE_LIMIT:
-                        archive_file.close()
-                        with open(archive_name, 'rb') as document:
-                            update.message.reply_document(document)
-                        os.remove(archive_name)
-                        archive_name = None
-                        archive_counter = archive_counter + 1
-                        size_sum = 0
-
-                    if archive_name is None:
-                        archive_name = user_id + '_' + \
-                            str(archive_counter) + '.zip'
-                        archive_file = zipfile.ZipFile(archive_name, 'w')
-
-                    archive_file.write(file, os.path.relpath(file, user_id))
-                    size_sum += file_size
-                    os.remove(file)
-                msg_text = '{0} tagged posts out of {1} have been downloaded'.format(
-                    tagged_media_counter, len(tagged_medias))
-                reply_message.edit_text(msg_text)
+                    archive = archiver.write(file, os.path.relpath(file, user_id))
+                    if archive:
+                        update.message.reply_document(open(archive, 'rb'))
+                        os.remove(archive)
+                reply_message.edit_text(
+                    '{0} tagged posts out of {1} have been downloaded'.format(tagged_media_counter + 1,
+                                                                              len(tagged_medias)))
                 tagged_media_counter = tagged_media_counter + 1
 
             # Highlight
             highlights = self.ig_tools.get_highlights(user_id)
-            highlight_counter = 1
+            highlight_counter = 0
             for highlight in highlights:
-                files = self.ig_tools.download_highlight(
-                    highlight.pk, user_id + '/highlights/')
+                files = self.ig_tools.download_highlight(highlight.pk, user_id + '/highlights/')
                 for file in files:
-                    file_size = os.stat(file).st_size
-                    if file_size >= self.FILE_SIZE_LIMIT:
-                        os.remove(file)
-                        continue
-
-                    if file_size + size_sum >= self.FILE_SIZE_LIMIT:
-                        archive_file.close()
-                        with open(archive_name, 'rb') as document:
-                            update.message.reply_document(document)
-                        os.remove(archive_name)
-                        archive_name = None
-                        archive_counter = archive_counter + 1
-                        size_sum = 0
-
-                    if archive_name is None:
-                        archive_name = user_id + '_' + \
-                            str(archive_counter) + '.zip'
-                        archive_file = zipfile.ZipFile(archive_name, 'w')
-
-                    archive_file.write(file, os.path.relpath(file, user_id))
-                    size_sum += file_size
-                    os.remove(file)
-                msg_text = '{0} highlights out of {1} have been downloaded'.format(
-                    highlight_counter, len(highlights))
-                reply_message.edit_text(msg_text)
+                    archive = archiver.write(file, os.path.relpath(file, user_id))
+                    if archive:
+                        update.message.reply_document(open(archive, 'rb'))
+                        os.remove(archive)
+                reply_message.edit_text(
+                    '{0} highlights out of {1} have been downloaded'.format(highlight_counter + 1, len(highlights)))
                 highlight_counter = highlight_counter + 1
 
-            if media_counter + highlight_counter == 2:
+            if media_counter + highlight_counter + tagged_media_counter == 0:
                 reply_message.edit_text('User don\'t have any media')
                 return None
 
-            if archive_name and archive_file:
-                archive_file.close()
-                with open(archive_name, 'rb') as document:
-                    update.message.reply_document(document)
-                os.remove(archive_name)
+            archive = archiver.close()
+            if archive:
+                update.message.reply_document(open(archive, 'rb'))
+                os.remove(archive)
 
-            if not os.path.exists(user_id):
+            if os.path.exists(user_id):
                 shutil.rmtree(user_id)
 
             reply_message.edit_text('Download completed with {0} posts & highlights and {1} archives'.format(
-                media_counter + tagged_media_counter + highlight_counter - 2, archive_counter))
+                media_counter + tagged_media_counter + highlight_counter, archiver.archive_counter))
 
         except PrivateAccountException:
             reply_message.edit_text('The account is private')
