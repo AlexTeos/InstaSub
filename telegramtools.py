@@ -19,15 +19,14 @@ class TelegramTools:
 
         self.dispatcher.add_handler(CommandHandler('start', self.help_command))
         self.dispatcher.add_handler(CommandHandler('help', self.help_command))
-        self.dispatcher.add_handler(MessageHandler(
-            Filters.text & ~Filters.command, self.resolve_command))
+        self.dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, self.resolve_command))
 
         self.updater.start_polling()
         self.updater.idle()
 
     def help_command(self, update: Update, context: CallbackContext) -> None:
         update.message.reply_text(
-            'Send me an username and I will send you an archived profile!')
+            'Send me an username and I will send you an archived profile! Also you can send me a link to a story, post or highlight!')
 
     def resolve_command(self, update: Update, context: CallbackContext) -> None:
         if '/highlights/' in update.message.text:
@@ -40,8 +39,7 @@ class TelegramTools:
             try:
                 return self.download_profile(update, context)
             except UserNotFound:
-                reply_message = update.message.reply_text(
-                    'I don\'t know what to do with that. Try something else')
+                reply_message = update.message.reply_text('I don\'t know what to do with that. Try something else')
 
     def download_story(self, update: Update, context: CallbackContext) -> None:
         try:
@@ -156,7 +154,11 @@ class TelegramTools:
             medias = self.ig_tools.get_user_medias(user_id)
             media_counter = 0
             for media in medias:
-                files = self.ig_tools.download_media(media, user_id + '/media/')
+                download_path = user_id + '/media/' + media.taken_at.strftime("%d.%m.%y %H-%M-%S") + '/'
+                info_file = self.ig_tools.get_media_info(media, download_path)
+                archiver.write(info_file, os.path.relpath(info_file, user_id))
+
+                files = self.ig_tools.download_media(media, download_path)
                 for file in files:
                     archive = archiver.write(file, os.path.relpath(file, user_id))
                     if archive:
@@ -170,7 +172,11 @@ class TelegramTools:
             tagged_medias = self.ig_tools.get_user_tagged_medias(user_id)
             tagged_media_counter = 0
             for tagged_media in tagged_medias:
-                files = self.ig_tools.download_media(tagged_media, user_id + '/tagged_media/')
+                download_path = user_id + '/tagged_media/' + tagged_media.taken_at.strftime("%d.%m.%y %H-%M-%S") + '/'
+                info_file = self.ig_tools.get_media_info(tagged_media, download_path)
+                archiver.write(info_file, os.path.relpath(info_file, user_id))
+
+                files = self.ig_tools.download_media(tagged_media, download_path)
                 for file in files:
                     archive = archiver.write(file, os.path.relpath(file, user_id))
                     if archive:
@@ -185,7 +191,13 @@ class TelegramTools:
             highlights = self.ig_tools.get_highlights(user_id)
             highlight_counter = 0
             for highlight in highlights:
-                files = self.ig_tools.download_highlight(highlight.pk, user_id + '/highlights/')
+                download_path = user_id + '/highlights/' + highlight.created_at.strftime(
+                    "%d.%m.%y %H-%M-%S") + '/'
+                info_file = self.ig_tools.get_highlight_info(highlight,
+                                                             download_path)
+                archiver.write(info_file, os.path.relpath(info_file, user_id))
+
+                files = self.ig_tools.download_highlight(highlight, download_path)
                 for file in files:
                     archive = archiver.write(file, os.path.relpath(file, user_id))
                     if archive:
@@ -207,8 +219,9 @@ class TelegramTools:
             if os.path.exists(user_id):
                 shutil.rmtree(user_id)
 
-            reply_message.edit_text('Download completed with {0} posts & highlights and {1} archives'.format(
-                media_counter + tagged_media_counter + highlight_counter, archiver.archive_counter))
+            reply_message.edit_text(
+                'Download completed with {0} posts, {1} tagged posts, {2} highlights and {3} archives'.format(
+                    media_counter, tagged_media_counter, highlight_counter, archiver.counter))
 
         except PrivateAccountException:
             reply_message.edit_text('The account is private')
