@@ -78,13 +78,33 @@ class InstagramTools:
         if media.user.full_name:
             info_file.write(' - ' + media.user.full_name)
         info_file.write('\n')
-        info_file.write('Caption: ' + media.caption_text + '\n')
+        if media.caption_text != '':
+            info_file.write('Caption: ' + media.caption_text + '\n')
         info_file.write('Created at: ' + media.taken_at.strftime("%d.%m.%y %H:%M:%S") + '\n')
         if media.location:
             info_file.write('Location: ' + media.location.name + '\n')
         info_file.write('Like count: ' + str(media.like_count) + '\n')
+        if media.comment_count:
+            comments = self.get_media_comments(media.pk)
+            if comments != '':
+                info_file.write('\nComments:\n' + comments)
         info_file.close()
         return info_file.name
+
+    def get_media_comments(self, media) -> str:
+        comments = self.client.media_comments(media)
+        if len(comments) == 0:
+            return ''
+        formatted_result = ''
+        for comment in comments:
+            if comment.text == '':
+                continue
+            formatted_result = formatted_result + comment.created_at_utc.strftime("%d.%m.%y/%H:%M:%S") + '/'
+            formatted_result = formatted_result + comment.user.username
+            if comment.user.full_name:
+                formatted_result = formatted_result + '/' + comment.user.full_name
+            formatted_result = formatted_result + ': ' + comment.text + '\n'
+        return formatted_result
 
     def download_story_from_url(self, url) -> Path:
         return self.client.story_download(self.client.story_pk_from_url(url))
