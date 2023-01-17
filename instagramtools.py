@@ -55,7 +55,7 @@ class InstagramTools:
         user = self.client.user_info(user_id)
         return not user.is_private
 
-    def download_media(self, media, path=None) -> list:
+    def download_media(self, media, path='./') -> list:
         if not os.path.exists(path):
             os.makedirs(path)
         if media.media_type == 1:
@@ -70,32 +70,29 @@ class InstagramTools:
         media = self.client.media_info(media_pk)
         return self.download_media(media)
 
-    def get_media_info(self, media, path=None) -> str:
-        if not os.path.exists(path):
-            os.makedirs(path)
-        info_file = open(path + '/' + media.pk + '.txt', 'w+', encoding="utf-8")
-        info_file.write('User: ' + media.user.username)
+    def get_media_info_from_url(self, url) -> str:
+        media_pk = self.client.media_pk_from_url(url)
+        media = self.client.media_info(media_pk)
+        return self.get_media_info(media)
+
+    def get_media_info(self, media) -> str:
+        info = 'User: ' + media.user.username
         if media.user.full_name:
-            info_file.write(' - ' + media.user.full_name)
-        info_file.write('\n')
+            info = info + ' - ' + media.user.full_name
+        info = info + '\n'
         if media.caption_text != '':
-            info_file.write('Caption: ' + media.caption_text + '\n')
-        info_file.write('Created at: ' + media.taken_at.strftime("%d.%m.%y %H:%M:%S") + '\n')
+            info = info + 'Caption: ' + media.caption_text + '\n'
+        info = info + 'Created at: ' + media.taken_at.strftime("%d.%m.%y %H:%M:%S") + '\n'
         if media.location:
-            info_file.write('Location: ' + media.location.name + '\n')
-        info_file.write('Like count: ' + str(media.like_count) + '\n')
-        if media.comment_count:
-            comments = self.get_media_comments(media.pk)
-            if comments != '':
-                info_file.write('\nComments:\n' + comments)
-        info_file.close()
-        return info_file.name
+            info = info + 'Location: ' + media.location.name + '\n'
+        info = info + 'Like count: ' + str(media.like_count) + '\n'
+        return info
 
     def get_media_comments(self, media) -> str:
-        comments = self.client.media_comments(media)
+        comments = self.client.media_comments(media.pk, 0)
         if len(comments) == 0:
             return ''
-        formatted_result = ''
+        formatted_result = '\nComments:\n'
         for comment in comments:
             if comment.text == '':
                 continue
@@ -113,17 +110,12 @@ class InstagramTools:
         return self.client.user_highlights(user_id)
 
     def get_highlight_info(self, highlight, path='./') -> str:
-        if not os.path.exists(path):
-            os.makedirs(path)
-        info_file = open(path + '/' + highlight.pk + '.txt', 'w+', encoding="utf-8")
-        info_file.write('User: ' + highlight.user.username)
+        info = 'User: ' + highlight.user.username
         if highlight.user.full_name:
-            info_file.write(' - ' + highlight.user.full_name)
-        info_file.write('\n')
-        info_file.write('Title: ' + highlight.title)
-        info_file.write('Created at: ' + highlight.created_at.strftime("%d.%m.%y %H:%M:%S") + '\n')
-        info_file.close()
-        return info_file.name
+            info = info + ' - ' + highlight.user.full_name
+        info = info + '\nTitle: ' + highlight.title
+        info = info + '\nCreated at: ' + highlight.created_at.strftime("%d.%m.%y %H:%M:%S")
+        return info
 
     def download_highlight(self, highlight, path='./') -> list:
         if not os.path.exists(path):

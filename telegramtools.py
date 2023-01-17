@@ -66,7 +66,13 @@ class TelegramTools:
                 else:
                     medias.append(InputMediaPhoto(media=open(media_path, 'rb')))
             reply_message.edit_text('Here is your media')
-            update.message.reply_media_group(medias)
+            caption = self.ig_tools.get_media_info_from_url(update.message.text)
+            if len(caption) > 1024:
+                update.message.reply_media_group(medias)
+                update.message.reply_text(caption)
+            else:
+                medias[0].caption = caption
+                update.message.reply_media_group(medias)
 
             for media_path in media_paths:
                 os.remove(media_path)
@@ -144,6 +150,13 @@ class TelegramTools:
                     return name
             return None
 
+    def save_to_file(self, str, path) -> str:
+        if not os.path.exists(os.path.dirname(path)):
+            os.makedirs(os.path.dirname(path))
+        with open(path, "w+", encoding="utf-8") as info_file:
+            info_file.write(str)
+        return path
+
     def download_profile(self, update: Update, context: CallbackContext) -> None:
         try:
             reply_message = update.message.reply_text('Checking user...')
@@ -155,9 +168,10 @@ class TelegramTools:
             media_counter = 0
             for media in medias:
                 download_path = user_id + '/media/' + media.taken_at.strftime("%d.%m.%y %H-%M-%S") + '/'
-                info_file = self.ig_tools.get_media_info(media, download_path)
+                info_file = self.save_to_file(
+                    self.ig_tools.get_media_info(media) + self.ig_tools.get_media_comments(media),
+                    download_path + media.pk + '.txt')
                 archiver.write(info_file, os.path.relpath(info_file, user_id))
-
                 files = self.ig_tools.download_media(media, download_path)
                 for file in files:
                     archive = archiver.write(file, os.path.relpath(file, user_id))
@@ -173,7 +187,9 @@ class TelegramTools:
             tagged_media_counter = 0
             for tagged_media in tagged_medias:
                 download_path = user_id + '/tagged_media/' + tagged_media.taken_at.strftime("%d.%m.%y %H-%M-%S") + '/'
-                info_file = self.ig_tools.get_media_info(tagged_media, download_path)
+                info_file = self.save_to_file(
+                    self.ig_tools.get_media_info(tagged_media) + self.ig_tools.get_media_comments(tagged_media),
+                    download_path + tagged_media.pk + '.txt')
                 archiver.write(info_file, os.path.relpath(info_file, user_id))
 
                 files = self.ig_tools.download_media(tagged_media, download_path)
@@ -193,8 +209,8 @@ class TelegramTools:
             for highlight in highlights:
                 download_path = user_id + '/highlights/' + highlight.created_at.strftime(
                     "%d.%m.%y %H-%M-%S") + '/'
-                info_file = self.ig_tools.get_highlight_info(highlight,
-                                                             download_path)
+                info_file = self.save_to_file(self.ig_tools.get_highlight_info(highlight),
+                                              download_path + highlight.pk + '.txt')
                 archiver.write(info_file, os.path.relpath(info_file, user_id))
 
                 files = self.ig_tools.download_highlight(highlight, download_path)
