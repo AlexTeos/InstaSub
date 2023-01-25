@@ -1,1 +1,4 @@
-instagrapi==1.16.30python-telegram-bot==13.5Pillow
+instagrapi==1.16.30
+python-telegram-bot==13.5
+configparser==5.3.0
+Pillow==9.4.0

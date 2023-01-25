@@ -7,7 +7,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/instagramtools.py instagramtools.py
 COPY app/telegramtools.py telegramtools.py
-COPY app/InstaSub.py InstaSub.py
+COPY app/instasub.py instasub.py
 
-ENTRYPOINT ["python", "InstaSub.py", "-t", "token", "-u", "username", "-p", "password"]
-
+CMD ["python", "instasub.py"]
