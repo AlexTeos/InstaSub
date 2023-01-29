@@ -1,6 +1,7 @@
 import os
 import shutil
 import zipfile
+import logging
 from telegram import Update, Bot, InputMediaPhoto, InputMediaVideo
 from telegram.ext import (Updater, CommandHandler, CallbackContext, Filters,
                           MessageHandler)
@@ -12,7 +13,9 @@ class TelegramTools:
     FILE_SIZE_LIMIT = 50 * 1024 * 1024
 
     def __init__(self, bot_token, ig_tools):
+        self.logger = logging.getLogger('instasub')
         self.ig_tools = ig_tools
+        self.logger.info('Sing in to telegram bot: id - {0}'.format(bot_token))
         self.bot = Bot(bot_token)
         self.updater = Updater(bot_token)
         self.dispatcher = self.updater.dispatcher
@@ -29,6 +32,7 @@ class TelegramTools:
             'Send me an username and I will send you an archived profile! Also you can send me a link to a story, post or highlight!')
 
     def resolve_command(self, update: Update, context: CallbackContext) -> None:
+        self.logger.info('New request from {0}: {1}'.format(update.message.from_user.id, update.message.text))
         if '/highlights/' in update.message.text:
             return self.download_highlight(update, context)
         elif '/stories/' in update.message.text:
@@ -39,6 +43,8 @@ class TelegramTools:
             try:
                 return self.download_profile(update, context)
             except UserNotFound:
+                self.logger.warning(
+                    'Unrecognized request from {0}: {1}'.format(update.message.from_user.id, update.message.text))
                 reply_message = update.message.reply_text('I don\'t know what to do with that. Try something else')
 
     def download_story(self, update: Update, context: CallbackContext) -> None:
@@ -52,7 +58,14 @@ class TelegramTools:
                 update.message.reply_photo(open(story_path, 'rb'))
 
             os.remove(story_path)
+
+            self.logger.debug(
+                'Story request from {0} was completed successfully: {1}'.format(update.message.from_user.id,
+                                                                                update.message.text))
         except MediaNotFound:
+            self.logger.debug(
+                'Story request from {0} was not completed - story not found: {1}'.format(update.message.from_user.id,
+                                                                                         update.message.text))
             reply_message.edit_text('Story not found')
 
     def download_media(self, update: Update, context: CallbackContext) -> None:
@@ -77,7 +90,13 @@ class TelegramTools:
             for media_path in media_paths:
                 os.remove(media_path)
 
+            self.logger.debug(
+                'Media request from {0} was completed successfully: {1}'.format(update.message.from_user.id,
+                                                                                update.message.text))
         except MediaNotFound:
+            self.logger.debug(
+                'Media request from {0} was not completed - media not found: {1}'.format(update.message.from_user.id,
+                                                                                         update.message.text))
             reply_message.edit_text('Media not found')
 
     def download_highlight(self, update: Update, context: CallbackContext) -> None:
@@ -105,7 +124,14 @@ class TelegramTools:
             for highlight_path in highlight_paths:
                 os.remove(highlight_path)
 
+            self.logger.debug(
+                'Highlight request from {0} was completed successfully: {1}'.format(update.message.from_user.id,
+                                                                                    update.message.text))
         except HighlightNotFound:
+            self.logger.debug(
+                'Highlight request from {0} was not completed - highlight not found: {1}'.format(
+                    update.message.from_user.id,
+                    update.message.text))
             reply_message.edit_text('Highlight not found')
 
     class SplitArchiver:
@@ -159,6 +185,10 @@ class TelegramTools:
 
     def download_profile(self, update: Update, context: CallbackContext) -> None:
         try:
+            self.logger.debug(
+                'Starting to download account {0} requested by {1}'.format(update.message.text,
+                                                                           update.message.from_user.id))
+
             reply_message = update.message.reply_text('Checking user...')
             user_id = self.ig_tools.get_user_id(update.message.text)
             archiver = self.SplitArchiver(user_id, self.FILE_SIZE_LIMIT)
@@ -182,6 +212,9 @@ class TelegramTools:
                     '{0} posts out of {1} have been downloaded'.format(media_counter + 1, len(medias)))
                 media_counter = media_counter + 1
 
+            self.logger.debug(
+                '{0}\'s medias downloaded successfully: {1}'.format(update.message.text, update.message.from_user.id))
+
             # Tagged media
             tagged_medias = self.ig_tools.get_user_tagged_medias(user_id)
             tagged_media_counter = 0
@@ -203,6 +236,10 @@ class TelegramTools:
                                                                               len(tagged_medias)))
                 tagged_media_counter = tagged_media_counter + 1
 
+            self.logger.debug(
+                '{0}\'s tagged medias downloaded successfully: {1}'.format(update.message.text,
+                                                                           update.message.from_user.id))
+
             # Highlight
             highlights = self.ig_tools.get_highlights(user_id)
             highlight_counter = 0
@@ -219,9 +256,10 @@ class TelegramTools:
                     if archive:
                         update.message.reply_document(open(archive, 'rb'))
                         os.remove(archive)
-                reply_message.edit_text(
-                    '{0} highlights out of {1} have been downloaded'.format(highlight_counter + 1, len(highlights)))
-                highlight_counter = highlight_counter + 1
+
+            self.logger.debug(
+                '{0}\'s highlights downloaded successfully: {1}'.format(update.message.text,
+                                                                        update.message.from_user.id))
 
             if media_counter + highlight_counter + tagged_media_counter == 0:
                 reply_message.edit_text('User don\'t have any media')
@@ -235,12 +273,15 @@ class TelegramTools:
             if os.path.exists(user_id):
                 shutil.rmtree(user_id)
 
-            reply_message.edit_text(
-                'Download completed with {0} posts, {1} tagged posts, {2} highlights and {3} archives'.format(
-                    media_counter, tagged_media_counter, highlight_counter, archiver.counter))
-
+            self.logger.debug(
+                'Account download request from {0} was completed successfully: {1}'.format(update.message.from_user.id,
+                                                                                           update.message.text))
         except PrivateAccountException:
+            self.logger.debug('Requested account {0} is private, request from {1} '.format(update.message.text,
+                                                                                           update.message.from_user.id))
             reply_message.edit_text('The account is private')
         except UserNotFound:
+            self.logger.debug('Requested account {0} does not exits, request from {1} '.format(update.message.text,
+                                                                                               update.message.from_user.id))
             reply_message.edit_text('Invalid link or username')
             raise
