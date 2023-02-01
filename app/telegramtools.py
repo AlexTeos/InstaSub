@@ -10,7 +10,7 @@ from instagramtools import (PrivateAccountException, UserNotFound,
 
 
 class TelegramTools:
-    FILE_SIZE_LIMIT = 50 * 1024 * 1024
+    FILE_SIZE_LIMIT = 48 * 1024 * 1024
 
     def __init__(self, bot_token, ig_tools):
         self.logger = logging.getLogger('instasub')
