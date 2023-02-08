@@ -63,7 +63,7 @@ class InstagramTools:
         user = self.client.user_info(user_id)
         return not user.is_private
 
-    def download_media(self, media, path='./') -> list:
+    def download_media(self, media, path) -> list:
         self.logger.debug('Download media: {0}'.format(media))
         if not os.path.exists(path):
             os.makedirs(path)
@@ -74,11 +74,11 @@ class InstagramTools:
         elif media.media_type == 8:
             return self.client.album_download(media.pk, path)
 
-    def download_media_from_url(self, url) -> list:
+    def download_media_from_url(self, url, path) -> list:
         self.logger.debug('Download media: {0}'.format(url))
         media_pk = self.client.media_pk_from_url(url)
         media = self.client.media_info(media_pk)
-        return self.download_media(media)
+        return self.download_media(media, path)
 
     def get_media_info_from_url(self, url) -> str:
         self.logger.debug('Get media info: {0}'.format(url))
@@ -116,15 +116,18 @@ class InstagramTools:
             formatted_result = formatted_result + ': ' + comment.text + '\n'
         return formatted_result
 
-    def download_story_from_url(self, url) -> Path:
+    def download_story_from_url(self, url, path) -> Path:
         self.logger.debug('Download story: {0}'.format(url))
-        return self.client.story_download(self.client.story_pk_from_url(url))
+        if not os.path.exists(path):
+            os.makedirs(path)
+        story_pk = self.client.story_pk_from_url(url)
+        return self.client.story_download(story_pk, story_pk, path)
 
     def get_highlights(self, user_id) -> list:
         self.logger.debug('Get user highlights: {0}'.format(user_id))
         return self.client.user_highlights(user_id)
 
-    def get_highlight_info(self, highlight, path='./') -> str:
+    def get_highlight_info(self, highlight) -> str:
         self.logger.debug('Get highlight info: {0}'.format(highlight))
         info = 'User: ' + highlight.user.username
         if highlight.user.full_name:
@@ -133,7 +136,7 @@ class InstagramTools:
         info = info + '\nCreated at: ' + highlight.created_at.strftime("%d.%m.%y %H:%M:%S")
         return info
 
-    def download_highlight(self, highlight, path='./') -> list:
+    def download_highlight(self, highlight, path) -> list:
         self.logger.debug('Download highlight: {0}'.format(highlight))
         if not os.path.exists(path):
             os.makedirs(path)
@@ -146,9 +149,9 @@ class InstagramTools:
                 paths.append(self.client.video_download_by_url(item.video_url, folder=path))
         return paths
 
-    def download_highlights_from_url(self, url):
+    def download_highlights_from_url(self, url, path):
         self.logger.debug('Download highlight: {0}'.format(url))
-        return self.download_highlight(self.client.highlight_info(self.client.highlight_pk_from_url(url)))
+        return self.download_highlight(self.client.highlight_info(self.client.highlight_pk_from_url(url)), path)
 
 
 class TestInstagramTools(unittest.TestCase):

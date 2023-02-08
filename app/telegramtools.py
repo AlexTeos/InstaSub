@@ -1,7 +1,9 @@
 import os
 import shutil
 import zipfile
+import asyncio
 import logging
+from aiostream import stream
 from telegram import Update, InputMediaPhoto, InputMediaVideo
 from telegram.ext import (Application, CommandHandler, ContextTypes, filters,
                           MessageHandler)
@@ -16,7 +18,7 @@ class TelegramTools:
         self.logger = logging.getLogger('instasub')
         self.ig_tools = ig_tools
         self.logger.info('Sing in to telegram bot: id - {0}'.format(bot_token))
-        self.application = Application.builder().token(bot_token).build()
+        self.application = Application.builder().token(bot_token).concurrent_updates(True).build()
         self.application.add_handler(CommandHandler('start', self.help_command))
         self.application.add_handler(CommandHandler('help', self.help_command))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.resolve_command))
@@ -46,14 +48,16 @@ class TelegramTools:
     async def download_story(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
             reply_message = await update.message.reply_text('Downloading story...')
-            story_path = self.ig_tools.download_story_from_url(update.message.text)
+            download_path = str(update.update_id) + '/'
+            story_path = self.ig_tools.download_story_from_url(update.message.text, download_path)
             await reply_message.edit_text('Here is your story')
             if str(story_path).endswith('.mp4'):
                 await update.message.reply_video(open(story_path, 'rb'))
             else:
                 await update.message.reply_photo(open(story_path, 'rb'))
 
-            os.remove(story_path)
+            if os.path.exists(download_path):
+                shutil.rmtree(download_path)
 
             self.logger.debug(
                 'Story request from {0} was completed successfully: {1}'.format(update.message.from_user.id,
@@ -67,7 +71,8 @@ class TelegramTools:
     async def download_media(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
             reply_message = await update.message.reply_text('Downloading media...')
-            media_paths = self.ig_tools.download_media_from_url(update.message.text)
+            download_path = str(update.update_id) + '/'
+            media_paths = self.ig_tools.download_media_from_url(update.message.text, download_path)
             medias = []
             for media_path in media_paths:
                 if str(media_path).endswith('.mp4'):
@@ -82,8 +87,8 @@ class TelegramTools:
             else:
                 await update.message.reply_media_group(media=medias, caption=caption)
 
-            for media_path in media_paths:
-                os.remove(media_path)
+            if os.path.exists(download_path):
+                shutil.rmtree(download_path)
 
             self.logger.debug(
                 'Media request from {0} was completed successfully: {1}'.format(update.message.from_user.id,
@@ -97,7 +102,8 @@ class TelegramTools:
     async def download_highlight(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
             reply_message = await update.message.reply_text('Downloading highlight...')
-            highlight_paths = self.ig_tools.download_highlights_from_url(update.message.text)
+            download_path = str(update.update_id) + '/'
+            highlight_paths = self.ig_tools.download_highlights_from_url(update.message.text, download_path)
             await reply_message.edit_text('Here is your highlights')
             highlights = []
             highlight_counter = 0
@@ -116,8 +122,8 @@ class TelegramTools:
                     highlights = []
                     highlight_counter = 0
 
-            for highlight_path in highlight_paths:
-                os.remove(highlight_path)
+            if os.path.exists(download_path):
+                shutil.rmtree(download_path)
 
             self.logger.debug(
                 'Highlight request from {0} was completed successfully: {1}'.format(update.message.from_user.id,
@@ -136,9 +142,10 @@ class TelegramTools:
         __SIZE_LIMIT = 0
         base_name = None
 
-        def __init__(self, base_name, file_size_limit):
+        def __init__(self, base_name, work_dir, file_size_limit):
             self.base_name = base_name
             self.__SIZE_LIMIT = file_size_limit
+            self.work_dir = work_dir
             pass
 
         def write(self, file, path) -> str:
@@ -152,7 +159,7 @@ class TelegramTools:
                 name = self.close()
 
             if self.file is None:
-                self.file = zipfile.ZipFile(self.base_name + '_' + str(self.counter) + '.zip', 'w')
+                self.file = zipfile.ZipFile(self.work_dir + self.base_name + '_' + str(self.counter) + '.zip', 'w')
 
             self.file.write(file, path)
             self.size += file_size
@@ -178,11 +185,10 @@ class TelegramTools:
             info_file.write(str)
         return path
 
-    async def gen_input(self, user_id):
-        # Media
+    async def download_medias(self, user_id, path):
         medias = self.ig_tools.get_user_medias(user_id)
         for media in medias:
-            download_path = user_id + '/media/' + media.taken_at.strftime("%d.%m.%y %H-%M-%S") + '/'
+            download_path = path + 'media/' + media.taken_at.strftime("%d.%m.%y %H-%M-%S") + '/'
             info_file = self.save_to_file(
                 self.ig_tools.get_media_info(media) + self.ig_tools.get_media_comments(media),
                 download_path + media.pk + '.txt')
@@ -191,13 +197,11 @@ class TelegramTools:
             for file in files:
                 yield file
 
-        # self.logger.debug(
-        #    '{0}\'s medias downloaded successfully: {1}'.format(update.message.text, update.message.from_user.id))
-
-        # Tagged media
+    async def download_tagged_medias(self, user_id, path):
         tagged_medias = self.ig_tools.get_user_tagged_medias(user_id)
         for tagged_media in tagged_medias:
-            download_path = user_id + '/tagged_media/' + tagged_media.taken_at.strftime("%d.%m.%y %H-%M-%S") + '/'
+            download_path = path + 'tagged_media/' + tagged_media.taken_at.strftime(
+                "%d.%m.%y %H-%M-%S") + '/'
             info_file = self.save_to_file(
                 self.ig_tools.get_media_info(tagged_media) + self.ig_tools.get_media_comments(tagged_media),
                 download_path + tagged_media.pk + '.txt')
@@ -206,14 +210,10 @@ class TelegramTools:
             for file in files:
                 yield file
 
-        # self.logger.debug(
-        #    '{0}\'s tagged medias downloaded successfully: {1}'.format(update.message.text,
-        #                                                               update.message.from_user.id))
-
-        # Highlight
+    async def download_highlights(self, user_id, path):
         highlights = self.ig_tools.get_highlights(user_id)
         for highlight in highlights:
-            download_path = user_id + '/highlights/' + highlight.created_at.strftime(
+            download_path = path + 'highlights/' + highlight.created_at.strftime(
                 "%d.%m.%y %H-%M-%S") + '/'
             info_file = self.save_to_file(self.ig_tools.get_highlight_info(highlight),
                                           download_path + highlight.pk + '.txt')
@@ -222,9 +222,13 @@ class TelegramTools:
             for file in files:
                 yield file
 
-        # self.logger.debug(
-        #    '{0}\'s highlights downloaded successfully: {1}'.format(update.message.text,
-        #                                                            update.message.from_user.id))
+    async def download_profile_medias(self, user_id, path):
+        combine = stream.merge(self.download_medias(user_id, path), self.download_tagged_medias(user_id, path),
+                               self.download_highlights(user_id, path))
+
+        async with combine.stream() as streamer:
+            async for item in streamer:
+                yield item
 
     async def download_profile(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
@@ -234,21 +238,27 @@ class TelegramTools:
 
             reply_message = await update.message.reply_text('Checking user...')
             user_id = self.ig_tools.get_user_id(update.message.text)
-            archiver = self.SplitArchiver(user_id, self.FILE_SIZE_LIMIT)
+            download_path = str(update.update_id) + '/'
+            archiver = self.SplitArchiver(update.message.text, download_path, self.FILE_SIZE_LIMIT)
 
-            async for file in self.gen_input(user_id):
-                archive = archiver.write(file, os.path.relpath(file, user_id))
+            i = 0
+            async for file in self.download_profile_medias(user_id, download_path):
+                archive = archiver.write(file, os.path.relpath(file, download_path))
                 if archive:
                     await update.message.reply_document(open(archive, 'rb'))
                     os.remove(archive)
+                i = i + 1
+                await reply_message.edit_text('{0} medias were downloaded'.format(i))
 
             archive = archiver.close()
             if archive:
                 await update.message.reply_document(open(archive, 'rb'))
                 os.remove(archive)
 
-            if os.path.exists(user_id):
-                shutil.rmtree(user_id)
+            if os.path.exists(download_path):
+                shutil.rmtree(download_path)
+
+            await reply_message.edit_text('Account download completed')
 
             self.logger.debug(
                 'Account download request from {0} was completed successfully: {1}'.format(update.message.from_user.id,
