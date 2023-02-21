@@ -222,9 +222,13 @@ class TelegramTools:
             for file in files:
                 yield file
 
+    async def download_user_info(self, user_id, path):
+        yield self.save_to_file(self.ig_tools.get_user_info(user_id), path + 'user_info.txt')
+        yield self.ig_tools.get_user_pic(user_id, path)
+
     async def download_profile_medias(self, user_id, path):
-        combine = stream.merge(self.download_medias(user_id, path), self.download_tagged_medias(user_id, path),
-                               self.download_highlights(user_id, path))
+        combine = stream.merge(self.download_user_info(user_id, path), self.download_medias(user_id, path),
+                               self.download_tagged_medias(user_id, path), self.download_highlights(user_id, path))
 
         async with combine.stream() as streamer:
             async for item in streamer:

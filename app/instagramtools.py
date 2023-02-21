@@ -100,6 +100,35 @@ class InstagramTools:
         info = info + 'Like count: ' + str(media.like_count) + '\n'
         return info
 
+    def get_user_info(self, user_id) -> str:
+        self.logger.debug('Get user info: {0}'.format(user_id))
+        user_info = self.client.user_info(user_id)
+        info = 'Id: ' + user_info.pk
+        info = info + '\nUsername: ' + user_info.username
+        if user_info.full_name:
+            info = info + '\nFull name: ' + user_info.full_name
+        if user_info.biography:
+            info = info + '\nBiography: ' + user_info.biography
+        if user_info.address_street:
+            info = info + '\nAddress street: ' + user_info.address_street
+        if user_info.city_name:
+            info = info + '\nCity name: ' + user_info.city_name
+        if user_info.contact_phone_number:
+            info = info + '\nContact phone number: ' + user_info.contact_phone_number
+        if user_info.public_phone_number:
+            info = info + '\nPublic phone number: ' + user_info.public_phone_number
+        if user_info.public_email:
+            info = info + '\nPublic email: ' + user_info.public_email
+        info = info + '\nMedia count: ' + str(user_info.media_count)
+        info = info + '\nFollower count: ' + str(user_info.follower_count)
+        info = info + '\nFollowing count: ' + str(user_info.following_count)
+        return info
+
+    def get_user_pic(self, user_id, path) -> str:
+        self.logger.debug('Get user pic: {0}'.format(user_id))
+        user_info = self.client.user_info(user_id)
+        return self.client.photo_download_by_url(user_info.profile_pic_url_hd, user_id, path)
+
     def get_media_comments(self, media) -> str:
         self.logger.debug('Get media comments: {0}'.format(media))
         comments = self.client.media_comments(media.pk, 0)
