@@ -15,6 +15,7 @@ class InstagramTools:
     def __init__(self, username, password):
         self.logger = logging.getLogger('instasub')
         self.client = Client()
+        self.set_delay(False)
         self.logger.info('Sing in to instagram: username - {0} password - {1}'.format(username, password))
         credential_file = '/ext/credential.json'
         if os.path.exists(credential_file):
@@ -30,6 +31,12 @@ class InstagramTools:
             self.logger.warning('Relogin to instagram')
             self.client.relogin()
             self.client.dump_settings(credential_file)
+
+    def set_delay(self, delay):
+        if delay:
+            self.client.request_timeout = 1
+        else:
+            self.client.request_timeout = 0
 
     @staticmethod
     def extract_username(username):

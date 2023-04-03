@@ -5,6 +5,7 @@ import asyncio
 import logging
 from aiostream import stream
 from telegram import Update, InputMediaPhoto, InputMediaVideo
+from telegram.error import TimedOut
 from telegram.ext import (Application, CommandHandler, ContextTypes, filters,
                           MessageHandler)
 from instagramtools import (PrivateAccountException, UserNotFound,
@@ -81,11 +82,12 @@ class TelegramTools:
                     medias.append(InputMediaPhoto(media=open(media_path, 'rb')))
             await reply_message.edit_text('Here is your media')
             caption = self.ig_tools.get_media_info_from_url(update.message.text)
-            if len(caption) > 1024:
+            # if len(caption) > 1024:
+            if True:
                 await update.message.reply_media_group(medias)
                 await update.message.reply_text(caption)
-            else:
-                await update.message.reply_media_group(media=medias, caption=caption)
+            # else:
+            #    await update.message.reply_media_group(media=medias, caption=caption)
 
             if os.path.exists(download_path):
                 shutil.rmtree(download_path)
@@ -235,6 +237,7 @@ class TelegramTools:
                 yield item
 
     async def download_profile(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        self.ig_tools.set_delay(True)
         try:
             self.logger.debug(
                 'Starting to download account {0} requested by {1}'.format(update.message.text,
@@ -252,7 +255,10 @@ class TelegramTools:
                     await update.message.reply_document(open(archive, 'rb'))
                     os.remove(archive)
                 i = i + 1
-                await reply_message.edit_text('{0} medias were downloaded'.format(i))
+                try:
+                    await reply_message.edit_text('{0} medias were downloaded'.format(i))
+                except TimedOut:
+                    pass
 
             archive = archiver.close()
             if archive:
@@ -276,3 +282,5 @@ class TelegramTools:
                                                                                                update.message.from_user.id))
             await reply_message.edit_text('Invalid link or username')
             raise
+
+        self.ig_tools.set_delay(False)
