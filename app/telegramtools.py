@@ -12,13 +12,26 @@ from instagramtools import (PrivateAccountException, UserNotFound,
                             MediaNotFound, HighlightNotFound)
 
 
+async def timeout_retry(attempts, func, *args, **kwargs):
+    for i in range(attempts):
+        try:
+            result = await func(*args, **kwargs)
+        except TimedOut as err:
+            exception = err
+        except Exception as err:
+            raise err
+        else:
+            return result
+    raise exception
+
+
 class TelegramTools:
     FILE_SIZE_LIMIT = 48 * 1024 * 1024
 
     def __init__(self, bot_token, ig_tools):
         self.logger = logging.getLogger('instasub')
         self.ig_tools = ig_tools
-        self.logger.info('Sing in to telegram bot: id - {0}'.format(bot_token))
+        self.logger.info('Sign in to telegram bot: id - {0}'.format(bot_token))
         self.application = Application.builder().token(bot_token).concurrent_updates(True).build()
         self.application.add_handler(CommandHandler('start', self.help_command))
         self.application.add_handler(CommandHandler('help', self.help_command))
@@ -27,8 +40,8 @@ class TelegramTools:
         self.application.run_polling()
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        await update.message.reply_text(
-            'Send me an username and I will send you an archived profile! Also you can send me a link to a story, post or highlight!')
+        await timeout_retry(3, update.message.reply_text,
+                            'Send me an username and I will send you an archived profile! Also you can send me a link to a story, post or highlight!')
 
     async def resolve_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         self.logger.info('New request from {0}: {1}'.format(update.message.from_user.id, update.message.text))
@@ -44,18 +57,19 @@ class TelegramTools:
             except UserNotFound:
                 self.logger.warning(
                     'Unrecognized request from {0}: {1}'.format(update.message.from_user.id, update.message.text))
-                reply_message = update.message.reply_text('I don\'t know what to do with that. Try something else')
+                await timeout_retry(3, update.message.reply_text,
+                                    'I don\'t know what to do with that. Try something else')
 
     async def download_story(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
-            reply_message = await update.message.reply_text('Downloading story...')
+            reply_message = await timeout_retry(3, update.message.reply_text, 'Downloading story...')
             download_path = str(update.update_id) + '/'
             story_path = self.ig_tools.download_story_from_url(update.message.text, download_path)
-            await reply_message.edit_text('Here is your story')
+            await timeout_retry(3, reply_message.edit_text, 'Here is your story')
             if str(story_path).endswith('.mp4'):
-                await update.message.reply_video(open(story_path, 'rb'))
+                await timeout_retry(3, update.message.reply_video, open(story_path, 'rb'))
             else:
-                await update.message.reply_photo(open(story_path, 'rb'))
+                await timeout_retry(3, update.message.reply_photo, open(story_path, 'rb'))
 
             if os.path.exists(download_path):
                 shutil.rmtree(download_path)
@@ -67,11 +81,11 @@ class TelegramTools:
             self.logger.debug(
                 'Story request from {0} was not completed - story not found: {1}'.format(update.message.from_user.id,
                                                                                          update.message.text))
-            await reply_message.edit_text('Story not found')
+            await timeout_retry(3, reply_message.edit_text, 'Story not found')
 
     async def download_media(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
-            reply_message = await update.message.reply_text('Downloading media...')
+            reply_message = await timeout_retry(3, update.message.reply_text, 'Downloading media...')
             download_path = str(update.update_id) + '/'
             media_paths = self.ig_tools.download_media_from_url(update.message.text, download_path)
             medias = []
@@ -80,14 +94,14 @@ class TelegramTools:
                     medias.append(InputMediaVideo(media=open(media_path, 'rb')))
                 else:
                     medias.append(InputMediaPhoto(media=open(media_path, 'rb')))
-            await reply_message.edit_text('Here is your media')
+            await timeout_retry(3, reply_message.edit_text, 'Here is your media')
             caption = self.ig_tools.get_media_info_from_url(update.message.text)
             # if len(caption) > 1024:
             if True:
-                await update.message.reply_media_group(medias)
-                await update.message.reply_text(caption)
+                await timeout_retry(3, update.message.reply_media_group, medias)
+                await timeout_retry(3, update.message.reply_text, caption)
             # else:
-            #    await update.message.reply_media_group(media=medias, caption=caption)
+            #    await timedout_retry(3, update.message.reply_media_group, media=medias, caption=caption)
 
             if os.path.exists(download_path):
                 shutil.rmtree(download_path)
@@ -99,14 +113,14 @@ class TelegramTools:
             self.logger.debug(
                 'Media request from {0} was not completed - media not found: {1}'.format(update.message.from_user.id,
                                                                                          update.message.text))
-            await reply_message.edit_text('Media not found')
+            await timeout_retry(3, reply_message.edit_text, 'Media not found')
 
     async def download_highlight(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
-            reply_message = await update.message.reply_text('Downloading highlight...')
+            reply_message = await timeout_retry(3, update.message.reply_text, 'Downloading highlight...')
             download_path = str(update.update_id) + '/'
             highlight_paths = self.ig_tools.download_highlights_from_url(update.message.text, download_path)
-            await reply_message.edit_text('Here is your highlights')
+            await timeout_retry(3, reply_message.edit_text, 'Here is your highlights')
             highlights = []
             highlight_counter = 0
             highlight_index = 0
@@ -120,7 +134,7 @@ class TelegramTools:
                 highlight_index = highlight_index + 1
 
                 if highlight_counter == 10 or highlight_index == len(highlight_paths):
-                    await update.message.reply_media_group(highlights)
+                    await timeout_retry(3, update.message.reply_media_group, highlights)
                     highlights = []
                     highlight_counter = 0
 
@@ -135,7 +149,7 @@ class TelegramTools:
                 'Highlight request from {0} was not completed - highlight not found: {1}'.format(
                     update.message.from_user.id,
                     update.message.text))
-            await reply_message.edit_text('Highlight not found')
+            await timeout_retry(3, reply_message.edit_text, 'Highlight not found')
 
     class SplitArchiver:
         file = None
@@ -190,14 +204,17 @@ class TelegramTools:
     async def download_medias(self, user_id, path):
         medias = self.ig_tools.get_user_medias(user_id)
         for media in medias:
-            download_path = path + 'media/' + media.taken_at.strftime("%d.%m.%y %H-%M-%S") + '/'
-            info_file = self.save_to_file(
-                self.ig_tools.get_media_info(media) + self.ig_tools.get_media_comments(media),
-                download_path + media.pk + '.txt')
-            yield info_file
-            files = self.ig_tools.download_media(media, download_path)
-            for file in files:
-                yield file
+            try:
+                download_path = path + 'media/' + media.taken_at.strftime("%d.%m.%y %H-%M-%S") + '/'
+                info_file = self.save_to_file(
+                    self.ig_tools.get_media_info(media) + self.ig_tools.get_media_comments(media),
+                    download_path + media.pk + '.txt')
+                yield info_file
+                files = self.ig_tools.download_media(media, download_path)
+                for file in files:
+                    yield file
+            except Exception as e:
+                self.logger.warning('fuck')
 
     async def download_tagged_medias(self, user_id, path):
         tagged_medias = self.ig_tools.get_user_tagged_medias(user_id)
@@ -243,7 +260,7 @@ class TelegramTools:
                 'Starting to download account {0} requested by {1}'.format(update.message.text,
                                                                            update.message.from_user.id))
 
-            reply_message = await update.message.reply_text('Checking user...')
+            reply_message = await timeout_retry(3, update.message.reply_text, 'Checking user...')
             user_id = self.ig_tools.get_user_id(update.message.text)
             download_path = str(update.update_id) + '/'
             archiver = self.SplitArchiver(update.message.text, download_path, self.FILE_SIZE_LIMIT)
@@ -252,23 +269,23 @@ class TelegramTools:
             async for file in self.download_profile_medias(user_id, download_path):
                 archive = archiver.write(file, os.path.relpath(file, download_path))
                 if archive:
-                    await update.message.reply_document(open(archive, 'rb'))
+                    await timeout_retry(3, update.message.reply_document, open(archive, 'rb'))
                     os.remove(archive)
                 i = i + 1
                 try:
-                    await reply_message.edit_text('{0} medias were downloaded'.format(i))
+                    await timeout_retry(1, reply_message.edit_text, '{0} medias were downloaded'.format(i))
                 except TimedOut:
                     pass
 
             archive = archiver.close()
             if archive:
-                await update.message.reply_document(open(archive, 'rb'))
+                await timeout_retry(3, update.message.reply_document, open(archive, 'rb'))
                 os.remove(archive)
 
             if os.path.exists(download_path):
                 shutil.rmtree(download_path)
 
-            await reply_message.edit_text('Account download completed')
+            await timeout_retry(3, reply_message.edit_text, 'Account download completed')
 
             self.logger.debug(
                 'Account download request from {0} was completed successfully: {1}'.format(update.message.from_user.id,
@@ -276,11 +293,11 @@ class TelegramTools:
         except PrivateAccountException:
             self.logger.debug('Requested account {0} is private, request from {1} '.format(update.message.text,
                                                                                            update.message.from_user.id))
-            await reply_message.edit_text('The account is private')
+            await timeout_retry(3, reply_message.edit_text, 'The account is private')
         except UserNotFound:
             self.logger.debug('Requested account {0} does not exits, request from {1} '.format(update.message.text,
                                                                                                update.message.from_user.id))
-            await reply_message.edit_text('Invalid link or username')
+            await timeout_retry(3, reply_message.edit_text, 'Invalid link or username')
             raise
 
         self.ig_tools.set_delay(False)

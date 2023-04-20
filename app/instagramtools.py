@@ -8,7 +8,27 @@ from instagrapi.exceptions import (LoginRequired, MediaNotFound,
 
 
 class PrivateAccountException(Exception):
-    "You are trying to interract with a private user"
+    "You are trying to interact with a private user."
+
+
+def retry_decorator(relogin_attempts=3):
+    def decorator(func):
+        def wrapped_func(*args, **kwargs):
+            for i in range(relogin_attempts):
+                try:
+                    result = func(*args, **kwargs)
+                except LoginRequired as err:
+                    exception = err
+                    args[0].relogin()
+                except Exception as err:
+                    exception = err
+                else:
+                    return result
+            raise exception
+
+        return wrapped_func
+
+    return decorator
 
 
 class InstagramTools:
@@ -16,21 +36,25 @@ class InstagramTools:
         self.logger = logging.getLogger('instasub')
         self.client = Client()
         self.set_delay(False)
-        self.logger.info('Sing in to instagram: username - {0} password - {1}'.format(username, password))
-        credential_file = '/ext/credential.json'
-        if os.path.exists(credential_file):
-            self.client.load_settings(credential_file)
-            self.client.login(username, password)
-        else:
-            self.client.login(username, password)
-            self.client.dump_settings(credential_file)
+        self._login(username, password)
 
+    def _login(self, username, password):
+        self.logger.info('Sing in to instagram: username - {0} password - {1}'.format(username, password))
+        self.credential_file = '/ext/credential.json'
+        if os.path.exists(self.credential_file):
+            self.client.load_settings(self.credential_file)
+            res = self.client.login(username, password)
+        else:
+            res = self.client.login(username, password)
+            self.client.dump_settings(self.credential_file)
+
+    def relogin(self):
+        self.logger.warning('Relogin to instagram')
         try:
-            self.client.account_info()
-        except LoginRequired:
-            self.logger.warning('Relogin to instagram')
             self.client.relogin()
-            self.client.dump_settings(credential_file)
+        except Exception as e:
+            print(str(e))
+        self.client.dump_settings(self.credential_file)
 
     def set_delay(self, delay):
         if delay:
@@ -49,27 +73,32 @@ class InstagramTools:
 
         return username.pop()
 
+    @retry_decorator()
     def get_user_id(self, username) -> str:
         self.logger.debug('Get user id: {0}'.format(username))
         return self.client.user_id_from_username(self.extract_username(username))
 
+    @retry_decorator()
     def get_user_medias(self, user_id):
         self.logger.debug('Get user media: {0}'.format(user_id))
         if not self.is_public_account(user_id):
             raise PrivateAccountException
         return self.client.user_medias(user_id)
 
+    @retry_decorator()
     def get_user_tagged_medias(self, user_id):
         self.logger.debug('Get user tagged media: {0}'.format(user_id))
         if not self.is_public_account(user_id):
             raise PrivateAccountException
         return self.client.usertag_medias(user_id)
 
+    @retry_decorator()
     def is_public_account(self, user_id):
         self.logger.debug('Check account privacy: {0}'.format(user_id))
         user = self.client.user_info(user_id)
         return not user.is_private
 
+    @retry_decorator()
     def download_media(self, media, path) -> list:
         self.logger.debug('Download media: {0}'.format(media))
         if not os.path.exists(path):
@@ -81,18 +110,21 @@ class InstagramTools:
         elif media.media_type == 8:
             return self.client.album_download(media.pk, path)
 
+    @retry_decorator()
     def download_media_from_url(self, url, path) -> list:
         self.logger.debug('Download media: {0}'.format(url))
         media_pk = self.client.media_pk_from_url(url)
         media = self.client.media_info(media_pk)
         return self.download_media(media, path)
 
+    @retry_decorator()
     def get_media_info_from_url(self, url) -> str:
         self.logger.debug('Get media info: {0}'.format(url))
         media_pk = self.client.media_pk_from_url(url)
         media = self.client.media_info(media_pk)
         return self.get_media_info(media)
 
+    @retry_decorator()
     def get_media_info(self, media) -> str:
         self.logger.debug('Get media info: {0}'.format(media))
         info = 'User: ' + media.user.username
@@ -107,6 +139,7 @@ class InstagramTools:
         info = info + 'Like count: ' + str(media.like_count) + '\n'
         return info
 
+    @retry_decorator()
     def get_user_info(self, user_id) -> str:
         self.logger.debug('Get user info: {0}'.format(user_id))
         user_info = self.client.user_info(user_id)
@@ -131,11 +164,13 @@ class InstagramTools:
         info = info + '\nFollowing count: ' + str(user_info.following_count)
         return info
 
+    @retry_decorator()
     def get_user_pic(self, user_id, path) -> str:
         self.logger.debug('Get user pic: {0}'.format(user_id))
         user_info = self.client.user_info(user_id)
         return self.client.photo_download_by_url(user_info.profile_pic_url_hd, user_id, path)
 
+    @retry_decorator()
     def get_media_comments(self, media) -> str:
         self.logger.debug('Get media comments: {0}'.format(media))
         comments = self.client.media_comments(media.pk, 0)
@@ -152,6 +187,7 @@ class InstagramTools:
             formatted_result = formatted_result + ': ' + comment.text + '\n'
         return formatted_result
 
+    @retry_decorator()
     def download_story_from_url(self, url, path) -> Path:
         self.logger.debug('Download story: {0}'.format(url))
         if not os.path.exists(path):
@@ -159,10 +195,12 @@ class InstagramTools:
         story_pk = self.client.story_pk_from_url(url)
         return self.client.story_download(story_pk, story_pk, path)
 
+    @retry_decorator()
     def get_highlights(self, user_id) -> list:
         self.logger.debug('Get user highlights: {0}'.format(user_id))
         return self.client.user_highlights(user_id)
 
+    @retry_decorator()
     def get_highlight_info(self, highlight) -> str:
         self.logger.debug('Get highlight info: {0}'.format(highlight))
         info = 'User: ' + highlight.user.username
@@ -172,6 +210,7 @@ class InstagramTools:
         info = info + '\nCreated at: ' + highlight.created_at.strftime("%d.%m.%y %H:%M:%S")
         return info
 
+    @retry_decorator()
     def download_highlight(self, highlight, path) -> list:
         self.logger.debug('Download highlight: {0}'.format(highlight))
         if not os.path.exists(path):
@@ -185,6 +224,7 @@ class InstagramTools:
                 paths.append(self.client.video_download_by_url(item.video_url, folder=path))
         return paths
 
+    @retry_decorator()
     def download_highlights_from_url(self, url, path):
         self.logger.debug('Download highlight: {0}'.format(url))
         return self.download_highlight(self.client.highlight_info(self.client.highlight_pk_from_url(url)), path)
