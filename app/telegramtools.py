@@ -4,8 +4,9 @@ import zipfile
 import asyncio
 import logging
 from aiostream import stream
+from time import sleep
 from telegram import Update, InputMediaPhoto, InputMediaVideo
-from telegram.error import TimedOut
+from telegram.error import (TimedOut, TelegramError)
 from telegram.ext import (Application, CommandHandler, ContextTypes, filters,
                           MessageHandler)
 from instagramtools import (PrivateAccountException, UserNotFound,
@@ -36,8 +37,20 @@ class TelegramTools:
         self.application.add_handler(CommandHandler('start', self.help_command))
         self.application.add_handler(CommandHandler('help', self.help_command))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.resolve_command))
+        self.application.add_error_handler(self.error_handler)
 
-        self.application.run_polling()
+        while True:
+            try:
+                self.application.run_polling()
+            except TelegramError as e:
+                self.logger.error('Telegram error occurred:', e.message)
+            except Exception as e:
+                self.logger.error('Exception occurre:', e)
+            sleep(1)
+
+    async def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+        self.logger.error('Exception occurred:', context.error)
+        sleep(1)
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await timeout_retry(3, update.message.reply_text,
