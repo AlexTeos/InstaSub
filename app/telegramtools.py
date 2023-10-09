@@ -29,9 +29,10 @@ async def timeout_retry(attempts, func, *args, **kwargs):
 class TelegramTools:
     FILE_SIZE_LIMIT = 48 * 1024 * 1024
 
-    def __init__(self, bot_token, ig_tools):
+    def __init__(self, bot_token, admin_id, ig_tools):
         self.logger = logging.getLogger('instasub')
         self.ig_tools = ig_tools
+        self.admin_id = admin_id
         self.logger.info('Sign in to telegram bot: id - {0}'.format(bot_token))
         self.application = Application.builder().token(bot_token).concurrent_updates(True).build()
         self.application.add_handler(CommandHandler('start', self.help_command))
@@ -44,13 +45,19 @@ class TelegramTools:
                 self.application.run_polling()
             except TelegramError as e:
                 self.logger.error('Telegram error occurred:', e.message)
+                self.notify_admin(e.message)
             except Exception as e:
-                self.logger.error('Exception occurre:', e)
+                self.logger.error('Exception occurred:', e)
+                self.notify_admin(str(e))
             sleep(1)
 
     async def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         self.logger.error('Exception occurred:', context.error)
+        self.notify_admin(context.error)
         sleep(1)
+
+    async def notify_admin(self, message):
+        self.application.bot.send_message(self.admin_id, message)
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await timeout_retry(3, update.message.reply_text,
@@ -114,7 +121,7 @@ class TelegramTools:
                 await timeout_retry(3, update.message.reply_media_group, medias)
                 await timeout_retry(3, update.message.reply_text, caption)
             # else:
-            #    await timedout_retry(3, update.message.reply_media_group, media=medias, caption=caption)
+            #    await timeout_retry(3, update.message.reply_media_group, media=medias, caption=caption)
 
             if os.path.exists(download_path):
                 shutil.rmtree(download_path)
@@ -227,7 +234,8 @@ class TelegramTools:
                 for file in files:
                     yield file
             except Exception as e:
-                self.logger.warning('fuck')
+                self.logger.error('During media download exception occurred:', str(e))
+                self.notify_admin('During media download exception occurred:' + str(e))
 
     async def download_tagged_medias(self, user_id, path):
         tagged_medias = self.ig_tools.get_user_tagged_medias(user_id)

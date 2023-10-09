@@ -6,9 +6,9 @@ from instagramtools import InstagramTools
 from telegramtools import TelegramTools
 
 
-def main(bot_tg_token, ig_username, ig_password) -> None:
+def main(bot_tg_token, tg_admin_id, ig_username, ig_password) -> None:
     ig_tools = InstagramTools(ig_username, ig_password)
-    TelegramTools(bot_tg_token, ig_tools)
+    TelegramTools(bot_tg_token, tg_admin_id, ig_tools)
 
 
 def setup_logger():
@@ -47,12 +47,15 @@ if __name__ == "__main__":
         else:
             config = configparser.ConfigParser()
             config.read(config_file)
-            if 'telegram' in config and 'instagram' in config and 'token' in config['telegram'] and 'username' in \
-                    config['instagram'] and 'password' in config['instagram'] and config['telegram']['token'] != '' and \
-                    config['instagram']['username'] != '' and config['instagram']['password'] != '':
-                logger.info('Start bot with arguments: TGToken - {0} IGUser - {1} IGPass - {2}'.format(
-                    config['telegram']['token'], config['instagram']['username'], config['instagram']['password']))
-                main(config['telegram']['token'], config['instagram']['username'], config['instagram']['password'])
+            if 'telegram' in config and 'instagram' in config and 'token' in config['telegram'] and 'admin' in config[
+                'telegram'] and 'username' in config['instagram'] and 'password' in config['instagram'] and \
+                    config['telegram']['token'] != '' and config['telegram']['admin'] != '' and config['instagram'][
+                'username'] != '' and config['instagram']['password'] != '':
+                logger.info('Start bot with arguments: TGToken - {0} TGAdmin - {1} IGUser - {2} IGPass - {3} '.format(
+                    config['telegram']['token'], config['telegram']['admin'], config['instagram']['username'],
+                    config['instagram']['password']))
+                main(config['telegram']['token'], config['telegram']['admin'], config['instagram']['username'],
+                     config['instagram']['password'])
             else:
                 logger.warning('Config file is incorrect:' + config_file.name)
     except Exception as e:
